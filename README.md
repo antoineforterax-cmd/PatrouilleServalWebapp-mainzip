@@ -13,10 +13,26 @@ npm run dev
 
 L’application est servie sur le port `5000`.
 
-## Connexion Supabase
+## Fonctionnement simple par défaut
 
-Le projet utilise Supabase pour la persistance. Renseigner ces variables dans
-les variables d’environnement Replit (ou dans un fichier `.env.local` local) :
+Sans configuration supplémentaire, SquadCraft fonctionne en mode local :
+les prénoms, codes et modifications sont enregistrés dans le stockage du
+navigateur. Les données restent donc sur cet appareil et ce navigateur.
+
+Compte de démonstration :
+
+```text
+Identifiant : Antoine
+Code        : SERVAL
+```
+
+Le CP peut ensuite modifier les accès depuis **Comptes**.
+
+## Connexion Supabase (optionnelle)
+
+Pour partager les mêmes données entre plusieurs appareils, il est possible
+d’activer Supabase. Renseigner alors ces variables dans les variables
+d’environnement Replit (ou dans un fichier `.env.local` local) :
 
 ```env
 VITE_SUPABASE_URL=https://<projet>.supabase.co
@@ -27,8 +43,8 @@ Appliquer ensuite les migrations dans l’ordre depuis `supabase/migrations/`.
 La migration v4 ajoute les données GPS et notes des week-ends ainsi que la
 fonction de transfert atomique de CP.
 
-Sans ces variables, l’application affiche volontairement un écran de
-configuration au lieu de tenter de contacter une URL Supabase fictive.
+Sans ces variables, l’application reste en mode local et ne tente pas de
+contacter une URL Supabase fictive.
 
 ## Vérifications
 

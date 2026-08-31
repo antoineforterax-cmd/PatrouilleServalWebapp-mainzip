@@ -30,7 +30,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { isLocalMode, supabase } from '@/lib/supabase';
 import type {
   User, Weekend, Materiel, Pharmacie, Transaction,
   Annonce, Message as ChatMessage, Badge, UserBadge, ParentRelation,
@@ -54,7 +54,6 @@ export default function App() {
   const [needsInit, setNeedsInit] = useState(false);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) { setLoading(false); return; }
     (async () => {
       const stored = getStoredSession();
       if (stored) { setSession(stored); setLoading(false); return; }
@@ -64,7 +63,6 @@ export default function App() {
     })();
   }, []);
 
-  if (!isSupabaseConfigured) return <ConfigurationScreen />;
   const handleLogin = (s: Session) => { setSession(s); setNeedsInit(false); };
   const handleLogout = () => { clearSession(); setSession(null); };
 
@@ -72,39 +70,6 @@ export default function App() {
   if (needsInit && !session) return <InitScreen onDone={handleLogin} />;
   if (!session) return <LoginScreen onLogin={handleLogin} />;
   return <Dashboard session={session} onLogout={handleLogout} />;
-}
-
-function ConfigurationScreen() {
-  return (
-    <div className="auth-screen">
-      <div className="auth-visual">
-        <div className="auth-visual-copy">
-          <span className="eyebrow"><ShieldCheck size={15} /> Espace privé scout</span>
-          <h1>SquadCraft<br /><em>Serval.</em></h1>
-          <p>La gestion numérique de la Patrouille du Serval.</p>
-        </div>
-        <div className="auth-sun" />
-        <div className="auth-forest forest-one" />
-        <div className="auth-forest forest-two" />
-      </div>
-      <div className="auth-panel">
-        <div className="auth-panel-inner">
-          <img src="/image.png" alt="SquadCraft" className="auth-logo" />
-          <span className="auth-kicker">Configuration requise</span>
-          <h2>Connecter la base</h2>
-          <p className="auth-intro">
-            Ajoute les variables publiques de ton projet Supabase dans l’environnement
-            Replit pour activer la connexion et la persistance des données.
-          </p>
-          <div className="config-list">
-            <div><code>VITE_SUPABASE_URL</code><span>URL du projet Supabase</span></div>
-            <div><code>VITE_SUPABASE_ANON_KEY</code><span>Clé publique anon</span></div>
-          </div>
-          <p className="auth-note"><ShieldCheck size={14} /> Les secrets ne sont jamais affichés dans l’application.</p>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 /* ── Init ──────────────────────────────────────────────── */
@@ -168,6 +133,7 @@ function InitScreen({ onDone }: { onDone: (s: Session) => void }) {
               </div>
             </label>
             {error && <p className="form-error">{error}</p>}
+            {isLocalMode && <p className="local-mode-note"><strong>Mode simple activé</strong><br />Pour essayer : Antoine · SERVAL</p>}
             <button className="primary-button auth-submit" disabled={busy}>
               {busy ? <><Loader2 size={18} className="spin" /> Configuration…</> : <>Configurer <ArrowUpRight size={18} /></>}
             </button>
@@ -231,6 +197,7 @@ function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
               </div>
             </label>
             {error && <p className="form-error">{error}</p>}
+            {isLocalMode && <p className="local-mode-note"><strong>Mode simple activé</strong><br />Pour essayer : Antoine · SERVAL</p>}
             <button className="primary-button auth-submit" disabled={busy}>
               {busy ? <><Loader2 size={18} className="spin" /> Connexion…</> : <>Se connecter <ArrowUpRight size={18} /></>}
             </button>
