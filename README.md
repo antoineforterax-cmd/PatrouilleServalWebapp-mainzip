@@ -19,14 +19,9 @@ Sans configuration supplémentaire, SquadCraft fonctionne en mode local :
 les prénoms, codes et modifications sont enregistrés dans le stockage du
 navigateur. Les données restent donc sur cet appareil et ce navigateur.
 
-Compte de démonstration :
-
-```text
-Identifiant : Antoine
-Code        : SERVAL
-```
-
-Le CP peut ensuite modifier les accès depuis **Comptes**.
+Au premier lancement, crée ton propre compte CP et le nom de ta patrouille.
+Le CP peut ensuite créer les patrouillards et les comptes parents depuis
+**Comptes & Accès**.
 
 ## Connexion Supabase (optionnelle)
 

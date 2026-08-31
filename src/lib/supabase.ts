@@ -3,7 +3,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
-const LOCAL_DB_KEY = 'squadcraft_local_database';
+const LOCAL_DB_KEY = 'squadcraft_local_database_v2';
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
@@ -16,48 +16,11 @@ export const isLocalMode = !isSupabaseConfigured;
 type LocalRow = Record<string, any>;
 type LocalDatabase = Record<string, LocalRow[]>;
 
-const badgeNames = [
-  'Artisan', 'Astronome', 'Boute-en-train', 'Campeur', 'Cuisinier',
-  'Gabier', 'Pionnier', 'Reporter', 'Secouriste', 'Serviteur de la liturgie',
-  'Sportif', 'Topographe', 'Transmetteur', 'Trappeur',
-];
-
-function demoDatabase(): LocalDatabase {
-  const patrolId = 'patrol-serval';
-  const createdAt = '2026-08-31T08:00:00.000Z';
+function emptyDatabase(): LocalDatabase {
   return {
-    patrouilles: [{ id: patrolId, nom: 'Patrouille du Serval', logo_url: null, created_at: createdAt }],
-    users: [
-      { id: 'user-antoine', prenom: 'Antoine', code_secret: 'SERVAL', role: 'CP', place: 'CP', role_technique: 'AUCUN', progression: 'PREMIERE_CLASSE', badges: null, aspirations: 'Faire grandir la patrouille et préparer le prochain camp.', photo_url: null, patrouille_id: patrolId, statut: 'ACTIF', created_at: createdAt },
-      { id: 'user-lucas', prenom: 'Lucas', code_secret: 'LUCAS', role: 'SP', place: 'SP', role_technique: 'PIONNIER', progression: 'SECONDE_CLASSE', badges: null, aspirations: 'Progresser en froissartage.', photo_url: null, patrouille_id: patrolId, statut: 'ACTIF', created_at: '2026-08-31T08:05:00.000Z' },
-      { id: 'user-emma', prenom: 'Emma', code_secret: 'EMMA', role: 'MEMBRE', place: 'TROISIEME', role_technique: 'SECOURISTE', progression: 'ASPIRANCE', badges: null, aspirations: 'Obtenir le badge Secouriste.', photo_url: null, patrouille_id: patrolId, statut: 'ACTIF', created_at: '2026-08-31T08:10:00.000Z' },
-      { id: 'user-marie', prenom: 'Marie', code_secret: 'PARENT', role: 'PARENT', place: 'AUTRE', role_technique: 'AUCUN', progression: 'AUCUNE', badges: null, aspirations: null, photo_url: null, patrouille_id: patrolId, statut: 'ACTIF', created_at: '2026-08-31T08:15:00.000Z' },
-    ],
-    annonces: [{ id: 'annonce-rentree', titre: 'Préparation du prochain week-end', contenu: 'Rendez-vous samedi à 8h au local. N’oubliez pas votre duvet et votre gourde.', image_url: null, auteur_id: 'user-antoine', patrouille_id: patrolId, created_at: '2026-08-30T18:00:00.000Z' }],
-    messages: [
-      { id: 'message-1', auteur_id: 'user-antoine', patrouille_id: patrolId, contenu: 'Rendez-vous samedi à 8h.', image_url: null, created_at: '2026-08-30T17:30:00.000Z' },
-      { id: 'message-2', auteur_id: 'user-lucas', patrouille_id: patrolId, contenu: 'Je prends la tente.', image_url: null, created_at: '2026-08-30T17:35:00.000Z' },
-    ],
-    badges: badgeNames.map((nom, index) => ({ id: `badge-${index}`, nom, patrouille_id: null, created_at: createdAt })),
-    user_badges: [{ id: 'user-badge-1', user_id: 'user-emma', badge_id: 'badge-8', statut: 'VALIDE', created_at: createdAt }],
-    parent_relations: [{ id: 'relation-1', parent_id: 'user-marie', enfant_id: 'user-emma', created_at: createdAt }],
-    materiels: [
-      { id: 'material-1', nom: 'Tente 6 places', categorie: 'TENTES', statut: 'EN_STOCK', quantite: 1, prix_estime: null, fournisseur: null, notes: null, patrouille_id: patrolId, created_at: createdAt },
-      { id: 'material-2', nom: 'Scie pliante', categorie: 'OUTILLAGE', statut: 'A_ACHETER', quantite: 2, prix_estime: 18, fournisseur: 'Decathlon', notes: null, patrouille_id: patrolId, created_at: createdAt },
-    ],
-    pharmacies: [
-      { id: 'pharmacy-1', nom: 'Compresses stériles', categorie: 'BOBOLOGIE', quantite: 12, date_peremption: '2028-06-01', patrouille_id: patrolId, created_at: createdAt },
-      { id: 'pharmacy-2', nom: 'Désinfectant', categorie: 'BOBOLOGIE', quantite: 1, date_peremption: '2026-09-10', patrouille_id: patrolId, created_at: createdAt },
-    ],
-    transactions: [
-      { id: 'transaction-1', titre: 'Cagnotte de rentrée', montant: 470, type: 'ENTREE', categorie: 'CAGNOTTE', date: '2026-08-01T12:00:00.000Z', patrouille_id: patrolId },
-      { id: 'transaction-2', titre: 'Achat popote', montant: 230, type: 'DEPENSE', categorie: 'MATERIEL', date: '2026-08-15T12:00:00.000Z', patrouille_id: patrolId },
-    ],
-    courses: [
-      { id: 'course-1', nom: 'Pain', quantite: 2, montant_estime: 4, montant_reel: null, achete: false, ticket_url: null, valide: false, patrouille_id: patrolId, created_at: createdAt },
-      { id: 'course-2', nom: 'Pâtes', quantite: 4, montant_estime: 6, montant_reel: null, achete: true, ticket_url: null, valide: false, patrouille_id: patrolId, created_at: createdAt },
-    ],
-    weekends: [{ id: 'weekend-1', titre: 'Week-end de rentrée', date_debut: '2026-09-12T08:00:00.000Z', date_fin: '2026-09-13T17:00:00.000Z', lieu_depart: 'Local scout', lieu_retour: 'Local scout', gps_depart: 'Local scout', gps_retour: 'Local scout', affaires: 'Duvet\nGourde\nSac à dos\nChaussures de marche', urgences: 'Prévenir le CP en cas de retard.', notes: 'Prévoir une tenue chaude.', patrouille_id: patrolId, created_at: createdAt }],
+    patrouilles: [], users: [], annonces: [], messages: [], badges: [],
+    user_badges: [], parent_relations: [], materiels: [], pharmacies: [],
+    transactions: [], courses: [], weekends: [],
   };
 }
 
@@ -68,7 +31,7 @@ function readLocalDatabase(): LocalDatabase {
   } catch {
     // Recreate a readable demo database if browser storage is unavailable.
   }
-  const seeded = demoDatabase();
+  const seeded = emptyDatabase();
   try { localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(seeded)); } catch { /* memory-only fallback */ }
   return seeded;
 }

@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import type { Session, User, Patrouille } from './types';
 
-const STORAGE_KEY = 'squadcraft_session';
+const STORAGE_KEY = 'squadcraft_session_v2';
 
 export function getStoredSession(): Session | null {
   try {
