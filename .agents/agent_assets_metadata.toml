@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "soTAo8ghC3b671aCLWoOP"
+uri = "file://screenshots/preview-final.png"
+type = "image"
+title = "Aperçu SquadCraft corrigé"
+description = "Capture du site chargé depuis l’adresse externe Replit, sur la page de première installation."
+logical_id = "bc3f1914-ced8-408a-876c-4391f504673d"
+content_hash = "sha256:972aacc7070d0e900bc1485ce68497f70aafe2209335a3e0993391ed61307e84"
+size = 94467
+mtime_ms = 1788194829779
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:f1449eee-33a7-446c-b7eb-f0710548c071/bc3f1914-ced8-408a-876c-4391f504673d/4ac6f856-f012-4e23-9f74-8e0e349d05b1"
+storage_version_token = "1788194846347238"
+content_type = "image/png"
