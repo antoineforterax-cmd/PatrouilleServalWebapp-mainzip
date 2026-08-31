@@ -57,6 +57,10 @@ export default function App() {
     (async () => {
       const stored = getStoredSession();
       if (stored) { setSession(stored); setLoading(false); return; }
+      if (isLocalMode) {
+        const demo = await login('Antoine', 'SERVAL');
+        if (demo.session) { setSession(demo.session); setLoading(false); return; }
+      }
       const exists = await checkAnyUserExists();
       if (!exists) setNeedsInit(true);
       setLoading(false);
@@ -162,6 +166,14 @@ function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
     setBusy(false);
   };
 
+  const enterDemo = async () => {
+    setBusy(true); setError('');
+    const { session, error: err } = await login('Antoine', 'SERVAL');
+    if (err) setError(err);
+    else if (session) onLogin(session);
+    setBusy(false);
+  };
+
   return (
     <div className="auth-screen">
       <div className="auth-visual">
@@ -201,6 +213,7 @@ function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
             <button className="primary-button auth-submit" disabled={busy}>
               {busy ? <><Loader2 size={18} className="spin" /> Connexion…</> : <>Se connecter <ArrowUpRight size={18} /></>}
             </button>
+            {isLocalMode && <button type="button" className="secondary-button auth-demo-button" onClick={enterDemo} disabled={busy}>Voir l’application <ChevronRight size={17} /></button>}
           </form>
         </div>
       </div>
