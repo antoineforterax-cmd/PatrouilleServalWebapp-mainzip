@@ -53,3 +53,16 @@ npm run typecheck
 npm run build
 npm run lint
 ```
+
+## Publier sur Vercel
+
+Le projet est exportable tel quel vers Vercel :
+
+1. Importer le dépôt dans Vercel.
+2. Laisser le framework détecté sur **Vite**.
+3. Utiliser `npm run build` comme commande de build.
+4. Utiliser `dist` comme dossier de sortie.
+5. Publier.
+
+Le fichier `vercel.json` est déjà présent pour que les pages React restent
+accessibles après un rechargement direct.
