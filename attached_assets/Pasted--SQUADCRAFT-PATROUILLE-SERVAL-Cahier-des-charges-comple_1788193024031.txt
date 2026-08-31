@@ -1,0 +1,1328 @@
+# 🐆 SQUADCRAFT — PATROUILLE SERVAL
+
+## Cahier des charges complet — Version mono-patrouille
+
+---
+
+# 1. OBJECTIF DU PROJET
+
+Créer **SquadCraft**, une application web privée dédiée exclusivement à la **Patrouille du Serval**.
+
+L'application sert de centre de gestion numérique de la patrouille :
+
+* membres ;
+* parents ;
+* rôles ;
+* progression ;
+* badges ;
+* aspirations ;
+* annonces ;
+* chat ;
+* week-ends ;
+* matériel ;
+* pharmacie ;
+* courses ;
+* trésorerie ;
+* urgences ;
+* gestion complète des accès.
+
+Il n'existe qu'une seule patrouille :
+
+```text
+🐆 PATROUILLE DU SERVAL
+```
+
+Ne pas créer de système de sélection de patrouille dans la première version.
+
+L'architecture doit cependant rester suffisamment propre pour permettre une évolution future vers plusieurs patrouilles.
+
+---
+
+# 2. IDENTITÉ VISUELLE
+
+Nom :
+
+```text
+SQUADCRAFT
+```
+
+Patrouille :
+
+```text
+🐆 SERVAL
+```
+
+Thème :
+
+* vert forêt ;
+* or / moutarde ;
+* beige clair ;
+* blanc cassé ;
+* rouge pour les alertes.
+
+Style :
+
+* moderne ;
+* scout ;
+* propre ;
+* chaleureux ;
+* professionnel ;
+* mobile-first.
+
+Exemple de palette :
+
+```text
+Forest Green   #1F5D42
+Dark Forest   #143D2B
+Gold           #C49A3A
+Beige          #F5F0E6
+Alert Red      #B42318
+```
+
+---
+
+# 3. UTILISATEURS
+
+Les rôles disponibles sont :
+
+```text
+CP
+SP
+HP
+MEMBRE
+PARENT
+```
+
+Le système doit permettre de gérer entièrement les comptes depuis l'application.
+
+Il n'y a pas d'inscription publique.
+
+---
+
+# 4. SYSTÈME DE CONNEXION
+
+La connexion ne nécessite pas d'adresse email.
+
+Écran :
+
+```text
+┌─────────────────────────────┐
+│        🐆 SERVAL             │
+│                             │
+│ Prénom                      │
+│ [ Antoine              ]    │
+│                             │
+│ Code d'accès                │
+│ [ ****************** ]     │
+│                             │
+│        [ Se connecter ]     │
+└─────────────────────────────┘
+```
+
+Le rôle est déterminé automatiquement depuis la base de données.
+
+Exemple :
+
+```text
+Antoine
+↓
+compte utilisateur
+↓
+role = CP
+↓
+Dashboard CP
+```
+
+Ne jamais permettre à l'utilisateur de choisir son propre rôle.
+
+---
+
+# 5. GESTION DES ACCÈS
+
+Le CP possède un véritable espace :
+
+```text
+⚙️ Gestion des accès
+```
+
+Le CP doit pouvoir :
+
+* créer un compte ;
+* attribuer un rôle ;
+* définir un prénom ;
+* générer ou choisir un code d'accès ;
+* modifier un compte ;
+* réinitialiser un code ;
+* désactiver un compte ;
+* réactiver un compte ;
+* supprimer un compte.
+
+Les comptes supprimés ne doivent plus pouvoir se connecter.
+
+Prévoir un statut :
+
+```text
+ACTIF
+DESACTIVE
+```
+
+---
+
+# 6. TRANSFERT DE CP
+
+Le changement de CP doit être une fonctionnalité spécifique.
+
+Le CP actuel doit pouvoir :
+
+### Étape 1
+
+Créer le profil du futur CP.
+
+Exemple :
+
+```text
+Créer un membre
+
+Prénom : Lucas
+Place : SP
+Rôle : MEMBRE
+```
+
+### Étape 2
+
+Configurer son accès :
+
+```text
+Lucas
+Code d'accès
+[ ******** ]
+```
+
+### Étape 3
+
+Préparer le transfert.
+
+Action :
+
+```text
+[ Transférer la responsabilité de CP ]
+```
+
+### Étape 4
+
+Le système transforme le futur CP en :
+
+```text
+role = CP
+place = CP
+```
+
+### Étape 5
+
+Le nouveau CP possède immédiatement tous les droits de gestion.
+
+### Étape 6
+
+L'ancien CP peut ensuite :
+
+* rester membre ;
+* devenir SP ;
+* devenir MEMBRE ;
+* ou voir son accès supprimé.
+
+IMPORTANT :
+
+Il doit être impossible de supprimer l'ancien CP avant d'avoir désigné un nouveau CP si aucun autre CP n'existe.
+
+Le transfert doit être atomique côté serveur afin d'éviter une patrouille sans CP.
+
+---
+
+# 7. STRUCTURE DES MEMBRES
+
+Chaque membre possède :
+
+```text
+Photo
+Prénom
+Place
+Rôle technique
+Progression
+Badges
+Aspirations
+Compte actif/inactif
+```
+
+Places :
+
+```text
+CP
+SP
+3e
+4e
+5e
+6e
+7e
+8e
+AUTRE
+```
+
+---
+
+# 8. RÔLES TECHNIQUES
+
+Catalogue initial :
+
+```text
+AUCUN
+TOPOGRAPHE
+TRESORIER
+MATERIALISTE
+SECOURISTE
+INTENDANT
+CUISINIER
+MAITRE_FEU
+RESP_PROPRETE
+PIONNIER
+```
+
+Le CP peut modifier le rôle technique d'un membre.
+
+---
+
+# 9. PROGRESSION SCOUTE
+
+Niveaux :
+
+```text
+AUCUNE
+PROMESSE
+ASPIRANCE
+SECONDE_CLASSE
+PREMIERE_CLASSE
+```
+
+Afficher visuellement la progression.
+
+Exemple :
+
+```text
+Progression d'Antoine
+
+✅ Promesse
+✅ Aspirance
+✅ Seconde classe
+🔒 Première classe
+```
+
+Le CP peut modifier la progression.
+
+Le membre peut consulter sa propre progression.
+
+---
+
+# 10. BADGES
+
+Catalogue initial des badges de spécialité Éclaireurs SUF :
+
+```text
+Artisan
+Astronome
+Boute-en-train
+Campeur
+Cuisinier
+Gabier
+Pionnier
+Reporter
+Secouriste
+Serviteur de la liturgie
+Sportif
+Topographe
+Transmetteur
+Trappeur
+```
+
+Ne pas inclure les badges marins.
+
+Les badges sont indépendants de la progression principale.
+
+Un membre peut avoir plusieurs badges.
+
+Exemple :
+
+```text
+Première classe
+
+Badges :
+✅ Astronome
+✅ Secouriste
+✅ Pionnier
+🔄 Topographe
+```
+
+Un badge peut être :
+
+```text
+A_COMMENCER
+EN_COURS
+VALIDE
+```
+
+---
+
+# 11. ASPIRATIONS
+
+Chaque membre dispose d'un champ personnel :
+
+```text
+🎯 Aspirations
+```
+
+Exemple :
+
+```text
+Cette année je veux :
+
+- obtenir ma première classe ;
+- progresser en froissartage ;
+- obtenir le badge Pionnier.
+```
+
+Le membre peut modifier ses propres aspirations.
+
+Le CP peut consulter et administrer celles des membres.
+
+---
+
+# 12. PARENTS
+
+Le CP peut créer des comptes parents.
+
+Un parent peut être associé à un ou plusieurs membres.
+
+Exemple :
+
+```text
+Parent
+└── Antoine
+
+ou
+
+Parent
+├── Antoine
+└── Lucas
+```
+
+Le CP peut :
+
+* créer un parent ;
+* modifier un parent ;
+* supprimer un parent ;
+* modifier son code ;
+* désactiver son accès ;
+* réactiver son accès ;
+* associer ou dissocier un enfant.
+
+---
+
+# 13. ESPACE PARENT
+
+Le parent possède une interface très réduite.
+
+Il peut voir :
+
+```text
+📢 Annonces
+🏕️ Week-ends
+🚨 Urgences
+```
+
+Et les informations utiles concernant son enfant :
+
+* progression ;
+* badges ;
+* informations pratiques.
+
+Le parent ne voit pas :
+
+* trésorerie ;
+* matériel détaillé ;
+* pharmacie détaillée ;
+* courses ;
+* gestion des comptes ;
+* chat interne.
+
+---
+
+# 14. DASHBOARD CP
+
+Le CP doit avoir une vue d'ensemble.
+
+Exemple :
+
+```text
+🐆 SERVAL
+
+Bonjour Antoine 👋
+
+💰 Caisse
+240 €
+
+👥 Membres
+8
+
+🛠️ Matériel
+4 achats nécessaires
+
+🩹 Pharmacie
+2 alertes
+
+🏕️ Prochain week-end
+12 septembre
+
+📢 Dernière annonce
+Préparation du week-end
+
+💬 5 nouveaux messages
+```
+
+---
+
+# 15. SIDEBAR
+
+Desktop :
+
+```text
+🐆 SERVAL
+
+📊 Vue d'ensemble
+📢 Annonces
+💬 Chat
+👥 Patrouillards
+🏕️ Week-ends
+🩹 Pharmacie
+🛠️ Malle & matériel
+🛒 Courses
+💰 Trésorerie
+🚨 Urgences
+⚙️ Paramètres
+```
+
+Sur téléphone :
+
+* menu hamburger ;
+* drawer ;
+* navigation tactile ;
+* pages plein écran adaptées.
+
+---
+
+# 16. ANNONCES
+
+Créer un module d'annonces pour la patrouille.
+
+Le CP peut :
+
+* créer ;
+* modifier ;
+* supprimer ;
+* ajouter une image.
+
+Une annonce contient :
+
+```text
+Titre
+Contenu
+Image facultative
+Date
+Auteur
+```
+
+Exemple :
+
+```text
+📢 MATÉRIEL DU WEEK-END
+
+N'oubliez pas les scies et les outils.
+
+📷 [photo]
+```
+
+Les membres et parents concernés peuvent consulter les annonces.
+
+---
+
+# 17. CHAT DE PATROUILLE
+
+Créer un chat privé exclusivement pour le Serval.
+
+Exemple :
+
+```text
+💬 CHAT — SERVAL
+
+Antoine
+Rendez-vous samedi à 8h.
+
+Lucas
+Ok 👍
+
+Thomas
+Je prends la tente.
+
+Paul
+Je prends la popote.
+```
+
+Le chat doit permettre :
+
+* messages texte ;
+* emojis ;
+* images ;
+* date ;
+* heure.
+
+Chaque message contient :
+
+```text
+id
+auteurId
+patrouilleId
+contenu
+imageUrl
+createdAt
+```
+
+---
+
+# 18. GESTION DU CHAT PAR LE CP
+
+Le CP possède des droits supplémentaires.
+
+Il peut :
+
+* supprimer un message ;
+* modérer un message ;
+* supprimer plusieurs messages ;
+* nettoyer l'historique.
+
+Ajouter dans les paramètres du chat :
+
+```text
+⚙️ Gestion du chat
+
+[ Supprimer ce message ]
+[ Vider l'historique ]
+```
+
+ATTENTION :
+
+L'action :
+
+```text
+Vider l'historique
+```
+
+doit demander une confirmation forte.
+
+Exemple :
+
+```text
+Voulez-vous vraiment supprimer tout
+l'historique du chat ?
+
+Cette action est irréversible.
+
+[ Annuler ] [ Supprimer ]
+```
+
+Le CP peut également supprimer **l'ensemble du chat/historique** lorsqu'il le souhaite, mais pas le système de messagerie lui-même.
+
+---
+
+# 19. MALLE & MATÉRIEL
+
+Catégories :
+
+```text
+TENTES
+FROISSARTAGE
+OUTILLAGE
+POPOTE
+FEU
+CAMPEMENT
+DIVERS
+```
+
+Chaque objet :
+
+```text
+Nom
+Catégorie
+Quantité
+Statut
+Prix estimé
+Fournisseur
+Notes
+```
+
+Statuts :
+
+```text
+EN_STOCK
+A_REPARER
+A_REMPLACER
+A_ACHETER
+```
+
+Le CP et les rôles autorisés peuvent modifier le matériel.
+
+---
+
+# 20. LISTE D'ACHATS
+
+Les objets :
+
+```text
+A_ACHETER
+A_REMPLACER
+```
+
+doivent apparaître automatiquement dans une liste.
+
+Afficher :
+
+```text
+Objet
+Quantité
+Prix estimé
+Fournisseur
+Total estimé
+```
+
+Lorsqu'un achat est validé :
+
+→ créer automatiquement une dépense de trésorerie.
+
+---
+
+# 21. PHARMACIE
+
+Catégories :
+
+```text
+TRAUMATOLOGIE
+BOBOLOGIE
+MEDICAMENTS
+```
+
+Chaque élément :
+
+```text
+Nom
+Catégorie
+Quantité
+Date de péremption
+```
+
+États visuels :
+
+```text
+🟢 Normal
+🟠 Bientôt périmé
+🔴 Périmé
+```
+
+Le délai d'alerte doit être configurable.
+
+---
+
+# 22. COURSES
+
+Créer des listes de courses.
+
+Exemple :
+
+```text
+🛒 COURSES
+
+Pain ✅
+Pâtes ✅
+Fromage ⬜
+Lait ⬜
+```
+
+Permettre d'enregistrer :
+
+```text
+Montant estimé
+Montant réel
+Date
+Ticket/photo facultatif
+```
+
+À la validation :
+
+```text
+Transaction DEPENSE
+Catégorie COURSES
+```
+
+---
+
+# 23. TRÉSORERIE
+
+Dashboard :
+
+```text
+💰 CAISSE DU SERVAL
+
+Solde
+240 €
+
+Entrées
++470 €
+
+Dépenses
+-230 €
+```
+
+Entrées :
+
+```text
+EXTRA_JOB
+CAGNOTTE
+AUTRE_ENTREE
+```
+
+Dépenses :
+
+```text
+COURSES
+MATERIEL
+AUTRE_DEPENSE
+```
+
+Calcul :
+
+```text
+Solde = total des entrées - total des dépenses
+```
+
+Ne pas stocker un solde fixe.
+
+---
+
+# 24. WEEK-ENDS
+
+Une fiche de week-end possède :
+
+```text
+Titre
+Date de début
+Date de fin
+Lieu de départ
+Lieu de retour
+GPS départ
+GPS retour
+Affaires
+Urgences
+Notes
+```
+
+Exemple :
+
+```text
+🏕️ WEEK-END
+
+12 → 14 septembre
+
+📍 Départ
+...
+
+📍 Retour
+...
+
+🎒 Affaires
+• Duvet
+• Gourde
+• Sac
+• Chaussures
+
+🚨 Important
+...
+```
+
+---
+
+# 25. URGENCES
+
+Module permettant d'afficher rapidement les informations importantes.
+
+Exemples :
+
+```text
+🚨 Contacts importants
+🚨 Consignes
+🚨 Informations de secours
+🚨 Informations médicales nécessaires
+```
+
+Les données sensibles doivent avoir des permissions strictes.
+
+---
+
+# 26. GESTION DES COMPTES
+
+Créer un écran réservé au CP :
+
+```text
+⚙️ COMPTES ET ACCÈS
+```
+
+Exemple :
+
+```text
+Antoine
+CP
+🟢 Actif
+
+Lucas
+SP
+🟢 Actif
+
+Thomas
+MEMBRE
+🟢 Actif
+
+Mme Dupont
+PARENT
+🟢 Actif
+```
+
+Actions :
+
+```text
+Modifier
+Réinitialiser le code
+Désactiver
+Supprimer
+```
+
+---
+
+# 27. SUPPRESSION DES ACCÈS
+
+Le CP peut supprimer un compte.
+
+Avant suppression :
+
+```text
+Êtes-vous certain de vouloir supprimer
+l'accès de Lucas ?
+
+Son compte ne pourra plus se connecter.
+
+[ Annuler ] [ Supprimer ]
+```
+
+La suppression du compte ne doit pas supprimer automatiquement tout l'historique de la patrouille lorsque ce n'est pas nécessaire.
+
+Conserver les données historiques importantes et dissocier l'utilisateur si nécessaire.
+
+---
+
+# 28. SÉCURITÉ
+
+IMPORTANT :
+
+Les permissions ne doivent jamais être uniquement gérées dans React.
+
+Chaque API / Server Action doit vérifier côté serveur :
+
+```text
+Utilisateur authentifié ?
+↓
+Quel rôle ?
+↓
+A-t-il le droit ?
+↓
+Ressource autorisée ?
+↓
+Autoriser / refuser
+```
+
+Le CP possède les droits administratifs uniquement parce que :
+
+```text
+session.user.role === CP
+```
+
+Les membres ne doivent jamais pouvoir s'attribuer eux-mêmes le rôle CP.
+
+---
+
+# 29. STACK
+
+Utiliser :
+
+```text
+Next.js
+App Router
+React
+TypeScript
+Tailwind CSS
+PostgreSQL
+Prisma
+```
+
+Architecture moderne et maintenable.
+
+---
+
+# 30. BASE DE DONNÉES
+
+Créer au minimum :
+
+```text
+User
+ParentRelation
+Annonce
+Message
+Badge
+UserBadge
+Materiel
+Pharmacie
+Transaction
+Course
+Weekend
+```
+
+La patrouille Serval peut rester représentée par une table `Patrouille` même si une seule patrouille existe dans la première version.
+
+Cela permettra une évolution future.
+
+Toutes les données métiers doivent être rattachées à :
+
+```text
+patrouilleId
+```
+
+---
+
+# 31. RESPONSIVE
+
+Priorité :
+
+```text
+1. Smartphone
+2. Tablette
+3. Desktop
+```
+
+L'application doit être parfaitement utilisable :
+
+* sur téléphone ;
+* en extérieur ;
+* avec une connexion pas forcément parfaite ;
+* avec de gros boutons ;
+* avec des interfaces simples.
+
+---
+
+# 32. HÉBERGEMENT ET DÉPLOIEMENT
+
+Le projet doit être conçu pour être facilement déployable sur des hébergeurs modernes.
+
+Cible principale :
+
+```text
+Vercel
+```
+
+Mais le projet doit rester compatible avec d'autres hébergeurs capables d'exécuter Next.js.
+
+Ne pas utiliser de fonctionnalités propriétaires inutiles qui empêcheraient facilement un déploiement ailleurs.
+
+Prévoir :
+
+```text
+DATABASE_URL
+```
+
+dans les variables d'environnement.
+
+Les secrets ne doivent jamais être commités dans Git.
+
+---
+
+# 33. DÉPLOIEMENT
+
+Prévoir une configuration adaptée à :
+
+```text
+GitHub
+↓
+Vercel
+↓
+Next.js
+↓
+PostgreSQL
+```
+
+Le projet doit pouvoir être installé avec :
+
+```bash
+npm install
+```
+
+puis :
+
+```bash
+npx prisma generate
+npx prisma migrate deploy
+npm run build
+```
+
+et démarré en production.
+
+---
+
+# 34. VARIABLES D'ENVIRONNEMENT
+
+Exemple :
+
+```env
+DATABASE_URL="..."
+AUTH_SECRET="..."
+STORAGE_URL="..."
+STORAGE_SECRET="..."
+```
+
+Ne jamais afficher les secrets côté client.
+
+---
+
+# 35. IMAGES
+
+Les images doivent être stockées dans un service de stockage externe adapté.
+
+La base stocke uniquement les URLs.
+
+Utilisations :
+
+```text
+Photo profil
+Logo Serval
+Image annonce
+Image chat
+Photo matériel
+Photo ticket de caisse
+```
+
+Prévoir :
+
+* limite de taille ;
+* validation du type ;
+* gestion des erreurs ;
+* optimisation.
+
+---
+
+# 36. LOGO DU SERVAL
+
+La patrouille peut avoir une icône ou un logo personnalisé.
+
+Le CP peut :
+
+* ajouter ;
+* remplacer ;
+* supprimer.
+
+Le logo est optionnel.
+
+Sans logo :
+
+```text
+🐆 SERVAL
+```
+
+Avec logo :
+
+```text
+[ IMAGE DU LOGO ]
+
+SERVAL
+```
+
+Le logo apparaît dans :
+
+* connexion ;
+* sidebar ;
+* dashboard ;
+* annonces ;
+* chat.
+
+---
+
+# 37. ORDRE DE DÉVELOPPEMENT
+
+NE PAS générer toute l'application d'un seul coup.
+
+Développer dans cet ordre :
+
+## Étape 1
+
+Initialisation :
+
+* Next.js ;
+* TypeScript ;
+* Tailwind ;
+* Prisma ;
+* PostgreSQL.
+
+## Étape 2
+
+Base de données.
+
+## Étape 3
+
+Authentification.
+
+## Étape 4
+
+Système de rôles et permissions.
+
+## Étape 5
+
+Gestion des comptes.
+
+## Étape 6
+
+Transfert de CP.
+
+## Étape 7
+
+Dashboard + sidebar.
+
+## Étape 8
+
+Patrouillards + progression + badges.
+
+## Étape 9
+
+Annonces.
+
+## Étape 10
+
+Chat.
+
+## Étape 11
+
+Matériel.
+
+## Étape 12
+
+Pharmacie.
+
+## Étape 13
+
+Courses + trésorerie.
+
+## Étape 14
+
+Week-ends + urgences.
+
+## Étape 15
+
+Upload images.
+
+## Étape 16
+
+Tests de sécurité.
+
+## Étape 17
+
+Déploiement.
+
+---
+
+# 38. TESTS DE SÉCURITÉ À PRÉVOIR
+
+Tester notamment :
+
+* membre essayant de modifier un autre membre ;
+* membre essayant de changer son rôle ;
+* SP essayant de créer un CP ;
+* parent essayant d'accéder au matériel ;
+* utilisateur désactivé essayant de se connecter ;
+* ancien CP essayant d'utiliser son ancien accès ;
+* tentative de suppression du dernier CP ;
+* utilisateur non authentifié appelant directement une API ;
+* modification d'un objet avec un identifiant qui ne lui appartient pas.
+
+Toutes ces actions doivent être refusées lorsque nécessaire.
+
+---
+
+# 39. OBJECTIF FINAL
+
+SquadCraft doit être le **tableau de bord numérique de la Patrouille du Serval**.
+
+Le CP doit pouvoir réellement gérer sa patrouille sans avoir besoin de modifier la base de données manuellement.
+
+Le CP peut :
+
+```text
+Créer un membre
+↓
+Créer son accès
+↓
+Modifier son profil
+↓
+Gérer sa progression
+↓
+Gérer ses badges
+↓
+Créer son parent
+↓
+Gérer le matériel
+↓
+Gérer la pharmacie
+↓
+Gérer les courses
+↓
+Gérer la caisse
+↓
+Créer les week-ends
+↓
+Publier des annonces
+↓
+Gérer le chat
+↓
+Créer un futur CP
+↓
+Transférer la fonction CP
+↓
+Supprimer ou désactiver son ancien accès
+```
+
+Le système doit être pensé pour que **le CP reste maître de sa patrouille**, tout en conservant une sécurité serveur solide.
+
+---
+
+# 40. RÈGLE DE CONCEPTION
+
+Construire d'abord une application fonctionnelle et sécurisée.
+
+Ne pas générer uniquement des maquettes ou des composants fictifs.
+
+Toutes les actions principales doivent être reliées à :
+
+* une vraie base de données ;
+* de vraies validations ;
+* de vrais contrôles d'accès ;
+* de vraies opérations serveur ;
+* une vraie persistance des données.
+
+L'interface doit ensuite refléter ces permissions.
