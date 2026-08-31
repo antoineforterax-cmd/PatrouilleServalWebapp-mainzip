@@ -30,9 +30,9 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import type {
-  User, Patrouille, Weekend, Materiel, Pharmacie, Transaction,
+  User, Weekend, Materiel, Pharmacie, Transaction,
   Annonce, Message as ChatMessage, Badge, UserBadge, ParentRelation,
   Course, View, Session,
 } from '@/lib/types';
@@ -54,6 +54,7 @@ export default function App() {
   const [needsInit, setNeedsInit] = useState(false);
 
   useEffect(() => {
+    if (!isSupabaseConfigured) { setLoading(false); return; }
     (async () => {
       const stored = getStoredSession();
       if (stored) { setSession(stored); setLoading(false); return; }
@@ -63,6 +64,7 @@ export default function App() {
     })();
   }, []);
 
+  if (!isSupabaseConfigured) return <ConfigurationScreen />;
   const handleLogin = (s: Session) => { setSession(s); setNeedsInit(false); };
   const handleLogout = () => { clearSession(); setSession(null); };
 
@@ -70,6 +72,39 @@ export default function App() {
   if (needsInit && !session) return <InitScreen onDone={handleLogin} />;
   if (!session) return <LoginScreen onLogin={handleLogin} />;
   return <Dashboard session={session} onLogout={handleLogout} />;
+}
+
+function ConfigurationScreen() {
+  return (
+    <div className="auth-screen">
+      <div className="auth-visual">
+        <div className="auth-visual-copy">
+          <span className="eyebrow"><ShieldCheck size={15} /> Espace privé scout</span>
+          <h1>SquadCraft<br /><em>Serval.</em></h1>
+          <p>La gestion numérique de la Patrouille du Serval.</p>
+        </div>
+        <div className="auth-sun" />
+        <div className="auth-forest forest-one" />
+        <div className="auth-forest forest-two" />
+      </div>
+      <div className="auth-panel">
+        <div className="auth-panel-inner">
+          <img src="/image.png" alt="SquadCraft" className="auth-logo" />
+          <span className="auth-kicker">Configuration requise</span>
+          <h2>Connecter la base</h2>
+          <p className="auth-intro">
+            Ajoute les variables publiques de ton projet Supabase dans l’environnement
+            Replit pour activer la connexion et la persistance des données.
+          </p>
+          <div className="config-list">
+            <div><code>VITE_SUPABASE_URL</code><span>URL du projet Supabase</span></div>
+            <div><code>VITE_SUPABASE_ANON_KEY</code><span>Clé publique anon</span></div>
+          </div>
+          <p className="auth-note"><ShieldCheck size={14} /> Les secrets ne sont jamais affichés dans l’application.</p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ── Init ──────────────────────────────────────────────── */
@@ -304,12 +339,42 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
 
 function Overview({ session, onNavigate }: { session: Session; onNavigate: (v: View) => void }) {
   const [stats, setStats] = useState({ members: null as number | null, balance: null as number | null, toBuy: null as number | null, pharmacyAlerts: null as number | null, nextWeekend: null as string | null, lastAnnonce: null as string | null, unreadMessages: null as number | null });
+  const [children, setChildren] = useState<User[]>([]);
+  const [childBadges, setChildBadges] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     if (!session.patrouille) return;
     const pid = session.patrouille.id;
     (async () => {
       const today = new Date().toISOString().split('T')[0];
+      if (isParent(session)) {
+        const [{ data: wk }, { data: an }, { data: relations }] = await Promise.all([
+          supabase.from('weekends').select('*').eq('patrouille_id', pid).gte('date_debut', today).order('date_debut').limit(1),
+          supabase.from('annonces').select('*').eq('patrouille_id', pid).order('created_at', { ascending: false }).limit(1),
+          supabase.from('parent_relations').select('*').eq('parent_id', session.user.id),
+        ]);
+        setStats({ members: null, balance: null, toBuy: null, pharmacyAlerts: null, nextWeekend: wk?.[0]?.titre ?? null, lastAnnonce: an?.[0]?.titre ?? null, unreadMessages: null });
+        const childIds = (relations as ParentRelation[] | null ?? []).map((relation) => relation.enfant_id);
+        if (childIds.length === 0) {
+          setChildren([]);
+          setChildBadges({});
+          return;
+        }
+        const [{ data: childUsers }, { data: userBadges }, { data: badges }] = await Promise.all([
+          supabase.from('users').select('*').in('id', childIds).eq('statut', 'ACTIF'),
+          supabase.from('user_badges').select('*').in('user_id', childIds),
+          supabase.from('badges').select('*'),
+        ]);
+        setChildren(childUsers ?? []);
+        const badgeNames = Object.fromEntries((badges ?? []).map((badge) => [badge.id, badge.nom]));
+        const grouped: Record<string, string[]> = {};
+        (userBadges ?? []).filter((badge) => badge.statut === 'VALIDE').forEach((badge) => {
+          const name = badgeNames[badge.badge_id];
+          if (name) grouped[badge.user_id] = [...(grouped[badge.user_id] ?? []), name];
+        });
+        setChildBadges(grouped);
+        return;
+      }
       const [{ count: m }, { count: mb }, { count: pa }] = await Promise.all([
         supabase.from('users').select('*', { count: 'exact', head: true }).eq('patrouille_id', pid).neq('role', 'PARENT').eq('statut', 'ACTIF'),
         supabase.from('materiels').select('*', { count: 'exact', head: true }).eq('patrouille_id', pid).in('statut', ['A_ACHETER', 'A_REMPLACER']),
@@ -325,6 +390,7 @@ function Overview({ session, onNavigate }: { session: Session; onNavigate: (v: V
         lastAnnonce: an?.[0]?.titre ?? null,
         unreadMessages: null,
       });
+
     })();
   }, [session]);
 
@@ -337,6 +403,20 @@ function Overview({ session, onNavigate }: { session: Session; onNavigate: (v: V
           <div className="stat-card gold"><div className="stat-card-top"><span>Dernière annonce</span><span className="stat-icon"><Megaphone size={19} /></span></div><strong>{stats.lastAnnonce ? 'Nouvelle' : '—'}</strong><small>{stats.lastAnnonce ?? 'Aucune'}</small></div>
         </div>
         <button className="primary-button" onClick={() => onNavigate('weekends')} style={{ marginTop: '20px' }}><TentTree size={18} /> Voir les week-ends</button>
+        <section className="panel" style={{ marginTop: '24px' }}>
+          <div className="panel-heading"><div><span className="eyebrow">Suivi famille</span><h2>Informations sur vos enfants</h2></div></div>
+          {children.length === 0 ? <p className="panel-footnote">Aucun enfant n’est encore associé à ce compte.</p> : (
+            <div className="children-list">
+              {children.map((child) => (
+                <div className="child-row" key={child.id}>
+                  <span className={`avatar avatar-${avatarColor(child.role)}`}>{initials(child.prenom)}</span>
+                  <div><b>{child.prenom}</b><small>{placeLabel(child.place)} · {progressionLabel(child.progression) || 'Progression à venir'}</small></div>
+                  <span className="child-badges">{childBadges[child.id]?.length ? `${childBadges[child.id].length} badge${childBadges[child.id].length > 1 ? 's' : ''}` : 'Aucun badge validé'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </>
     );
   }
@@ -370,6 +450,7 @@ function Annonces({ session, onToast }: { session: Session; onToast: (m: string)
   const [annonces, setAnnonces] = useState<Annonce[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [editingAnnonce, setEditingAnnonce] = useState<Annonce | null>(null);
   const [form, setForm] = useState({ titre: '', contenu: '', imageUrl: '' });
 
   const load = async () => {
@@ -385,19 +466,29 @@ function Annonces({ session, onToast }: { session: Session; onToast: (m: string)
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.titre.trim() || !form.contenu.trim() || !session.patrouille) return;
-    const { error } = await supabase.from('annonces').insert({
+    const payload = {
       titre: form.titre.trim(), contenu: form.contenu.trim(),
-      image_url: form.imageUrl.trim() || null, auteur_id: session.user.id,
-      patrouille_id: session.patrouille.id,
-    });
+      image_url: form.imageUrl.trim() || null,
+    };
+    const { error } = editingAnnonce
+      ? await supabase.from('annonces').update(payload).eq('id', editingAnnonce.id)
+      : await supabase.from('annonces').insert({ ...payload, auteur_id: session.user.id, patrouille_id: session.patrouille.id });
     if (error) { onToast('Erreur'); return; }
-    setForm({ titre: '', contenu: '', imageUrl: '' }); setShowAdd(false);
-    onToast('Annonce publiée'); load();
+    setForm({ titre: '', contenu: '', imageUrl: '' }); setShowAdd(false); setEditingAnnonce(null);
+    onToast(editingAnnonce ? 'Annonce modifiée' : 'Annonce publiée'); load();
   };
 
   const del = async (id: string) => {
-    await supabase.from('annonces').delete().eq('id', id);
+    if (!window.confirm('Supprimer cette annonce ?')) return;
+    const { error } = await supabase.from('annonces').delete().eq('id', id);
+    if (error) { onToast('Impossible de supprimer cette annonce'); return; }
     onToast('Annonce supprimée'); load();
+  };
+
+  const startEdit = (annonce: Annonce) => {
+    setEditingAnnonce(annonce);
+    setForm({ titre: annonce.titre, contenu: annonce.contenu, imageUrl: annonce.image_url ?? '' });
+    setShowAdd(true);
   };
 
   const canManage = canManageAnnonces(session);
@@ -413,7 +504,7 @@ function Annonces({ session, onToast }: { session: Session; onToast: (m: string)
               <div className="annonce-card" key={a.id}>
                 <div className="annonce-header">
                   <div><span className="eyebrow">{new Date(a.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</span><h2>{a.titre}</h2></div>
-                  {canManage && <button className="row-menu" onClick={() => del(a.id)}><X size={16} /></button>}
+                  {canManage && <div className="card-actions"><button className="row-menu" onClick={() => startEdit(a)}>Modifier</button><button className="row-menu" onClick={() => del(a.id)}><X size={16} /></button></div>}
                 </div>
                 <p className="annonce-contenu">{a.contenu}</p>
                 {a.image_url && <img src={a.image_url} alt={a.titre} className="annonce-image" />}
@@ -424,12 +515,12 @@ function Annonces({ session, onToast }: { session: Session; onToast: (m: string)
       {showAdd && (
         <div className="modal-backdrop" onMouseDown={() => setShowAdd(false)}>
           <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="modal-heading"><div><span className="eyebrow">Nouvelle annonce</span><h2>Publier</h2></div><button className="icon-button" onClick={() => setShowAdd(false)}><X size={18} /></button></div>
+            <div className="modal-heading"><div><span className="eyebrow">{editingAnnonce ? 'Modifier l’annonce' : 'Nouvelle annonce'}</span><h2>{editingAnnonce ? 'Modifier' : 'Publier'}</h2></div><button className="icon-button" onClick={() => { setShowAdd(false); setEditingAnnonce(null); }}><X size={18} /></button></div>
             <form onSubmit={add}>
               <label>Titre<input value={form.titre} onChange={(e) => setForm({ ...form, titre: e.target.value })} placeholder="Ex: Matériel du week-end" autoFocus /></label>
               <label>Contenu<textarea value={form.contenu} onChange={(e) => setForm({ ...form, contenu: e.target.value })} placeholder="N'oubliez pas les scies et les outils." rows={4} /></label>
               <label>Image (URL, optionnel)<input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} placeholder="https://…" /></label>
-              <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setShowAdd(false)}>Annuler</button><button className="primary-button" disabled={!form.titre.trim() || !form.contenu.trim()}><Check size={17} /> Publier</button></div>
+              <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => { setShowAdd(false); setEditingAnnonce(null); }}>Annuler</button><button className="primary-button" disabled={!form.titre.trim() || !form.contenu.trim()}><Check size={17} /> {editingAnnonce ? 'Enregistrer' : 'Publier'}</button></div>
             </form>
           </div>
         </div>
@@ -444,6 +535,7 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [users, setUsers] = useState<Record<string, User>>({});
   const [text, setText] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [showClear, setShowClear] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -475,9 +567,10 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
     if (!text.trim() || !session.patrouille) return;
     const { error } = await supabase.from('messages').insert({
       auteur_id: session.user.id, patrouille_id: session.patrouille.id, contenu: text.trim(),
+      image_url: imageUrl.trim() || null,
     });
     if (error) { onToast('Erreur'); return; }
-    setText(''); load();
+    setText(''); setImageUrl(''); load();
   };
 
   const delMsg = async (id: string) => {
@@ -507,10 +600,11 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
               const isMe = m.auteur_id === session.user.id;
               return (
                 <div className={`chat-msg ${isMe ? 'me' : ''}`} key={m.id}>
-                  <span className={`avatar avatar-${avatarColor(author?.role ?? 'MEMBRE')}`}>{initials(author?.prenom ?? '?')}</span>
+                   <span className={`avatar avatar-${avatarColor(author?.role ?? 'MEMBRE')}`}>{author?.photo_url ? <img src={author.photo_url} alt="" /> : initials(author?.prenom ?? '?')}</span>
                   <div className="chat-msg-body">
                     <div className="chat-msg-header"><b>{author?.prenom ?? 'Inconnu'}</b><small>{new Date(m.created_at).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div>
                     <p>{m.contenu}</p>
+                     {m.image_url && <img src={m.image_url} alt="Image partagée dans le chat" className="chat-image" />}
                     {canMod && <button className="chat-delete" onClick={() => delMsg(m.id)}><X size={12} /></button>}
                   </div>
                 </div>
@@ -519,7 +613,8 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
           }
         </div>
         <form className="chat-input-bar" onSubmit={send}>
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Écris ton message…" />
+           <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Écris ton message…" />
+           <input className="chat-image-input" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="URL image" aria-label="URL d'une image" />
           <button className="primary-button" type="submit" disabled={!text.trim()}><ArrowUpRight size={18} /></button>
         </form>
       </div>
@@ -588,7 +683,7 @@ function Members({ session, onToast }: { session: Session; onToast: (m: string) 
             {filtered.map((u) => (
               <div className="member-card" key={u.id} onClick={() => setEditingUser(u)} style={{ cursor: 'pointer' }}>
                 <div className="member-card-top">
-                  <span className={`avatar avatar-${avatarColor(u.role)}`}>{initials(u.prenom)}</span>
+                  <span className={`avatar avatar-${avatarColor(u.role)}`}>{u.photo_url ? <img src={u.photo_url} alt="" /> : initials(u.prenom)}</span>
                   {canManage && u.role !== 'CP' && <button className="more-button" onClick={(e) => { e.stopPropagation(); deleteUser(u.id); }}><X size={16} /></button>}
                   {u.statut === 'DESACTIVE' && <span className="status-dot disabled" />}
                 </div>
@@ -626,6 +721,9 @@ function Members({ session, onToast }: { session: Session; onToast: (m: string) 
 function UserDetailModal({ user, session, onClose, onToast, onUpdate }: { user: User; session: Session; onClose: () => void; onToast: (m: string) => void; onUpdate: () => void }) {
   const [aspirations, setAspirations] = useState(user.aspirations ?? '');
   const [progression, setProgression] = useState(user.progression);
+  const [place, setPlace] = useState(user.place);
+  const [roleTechnique, setRoleTechnique] = useState(user.role_technique);
+  const [photoUrl, setPhotoUrl] = useState(user.photo_url ?? '');
   const [userBadges, setUserBadges] = useState<UserBadge[]>([]);
   const [allBadges, setAllBadges] = useState<Badge[]>([]);
   const canEdit = canManageMembers(session) || session.user.id === user.id;
@@ -634,15 +732,26 @@ function UserDetailModal({ user, session, onClose, onToast, onUpdate }: { user: 
     (async () => {
       const { data: ub } = await supabase.from('user_badges').select('*').eq('user_id', user.id);
       setUserBadges(ub ?? []);
-      const { data: ab } = await supabase.from('badges').select('*');
+      let { data: ab } = await supabase.from('badges').select('*').order('nom');
+      if (!ab || ab.length === 0) {
+        await supabase.from('badges').upsert(BADGE_CATALOG.map((nom) => ({ nom })), { onConflict: 'nom', ignoreDuplicates: true });
+        const seeded = await supabase.from('badges').select('*').order('nom');
+        ab = seeded.data;
+      }
       setAllBadges(ab ?? []);
     })();
   }, [user.id]);
 
   const save = async () => {
-    const { error } = await supabase.from('users').update({
+    const changes: Record<string, unknown> = {
       aspirations: aspirations.trim() || null, progression,
-    }).eq('id', user.id);
+    };
+    if (canManageMembers(session)) {
+      changes.place = place;
+      changes.role_technique = roleTechnique;
+      changes.photo_url = photoUrl.trim() || null;
+    }
+    const { error } = await supabase.from('users').update(changes).eq('id', user.id);
     if (error) { onToast('Erreur'); return; }
     onToast('Profil mis à jour'); onUpdate(); onClose();
   };
@@ -671,11 +780,20 @@ function UserDetailModal({ user, session, onClose, onToast, onUpdate }: { user: 
       <div className="modal modal-wide" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-heading"><div><span className="eyebrow">Fiche membre</span><h2>{user.prenom}</h2></div><button className="icon-button" onClick={onClose}><X size={18} /></button></div>
         <div className="user-detail-info">
-          <span className={`avatar avatar-${avatarColor(user.role)}`}>{initials(user.prenom)}</span>
+           <span className={`avatar avatar-${avatarColor(user.role)}`}>{user.photo_url ? <img src={user.photo_url} alt="" /> : initials(user.prenom)}</span>
           <div><b>{user.prenom}</b><small>{placeLabel(user.place)} · {user.role}</small>{user.role_technique !== 'AUCUN' && <small>{roleTechLabel(user.role_technique)}</small>}</div>
         </div>
         {canEdit ? (
           <>
+            {canManageMembers(session) && (
+              <>
+                <div className="form-row">
+                  <label>Place<select value={place} onChange={(e) => setPlace(e.target.value as User['place'])}><option value="AUTRE">Autre</option><option value="SP">SP</option><option value="TROISIEME">3e</option><option value="QUATRIEME">4e</option><option value="CINQUIEME">5e</option><option value="SIXIEME">6e</option><option value="SEPTIEME">7e</option><option value="HUITIEME">8e</option></select></label>
+                  <label>Rôle technique<select value={roleTechnique} onChange={(e) => setRoleTechnique(e.target.value as User['role_technique'])}><option value="AUCUN">Aucun</option><option value="TOPOGRAPHE">Topographe</option><option value="TRESORIER">Trésorier</option><option value="MATERIALISTE">Matérialiste</option><option value="SECOURISTE">Secouriste</option><option value="INTENDANT">Intendant</option><option value="CUISINIER">Cuisinier</option><option value="MAITRE_FEU">Maître du feu</option><option value="RESP_PROPRETE">Resp. propreté</option><option value="PIONNIER">Pionnier</option></select></label>
+                </div>
+                <label>Photo (URL, optionnel)<input value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} placeholder="https://…" /></label>
+              </>
+            )}
             <label>Progression<select value={progression} onChange={(e) => setProgression(e.target.value as User['progression'])}><option value="AUCUNE">Aucune</option><option value="PROMESSE">Promesse</option><option value="ASPIRANCE">Aspirance</option><option value="SECONDE_CLASSE">Seconde classe</option><option value="PREMIERE_CLASSE">Première classe</option></select></label>
             <label>Aspirations / objectifs<textarea value={aspirations} onChange={(e) => setAspirations(e.target.value)} placeholder="Cette année je veux…" rows={3} /></label>
             {canManageMembers(session) && (
@@ -715,7 +833,7 @@ function Weekends({ session, onToast }: { session: Session; onToast: (m: string)
   const [weekends, setWeekends] = useState<Weekend[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ titre: '', dateDebut: '', dateFin: '', lieuDepart: '', lieuRetour: '', affaires: '', urgences: '' });
+  const [form, setForm] = useState({ titre: '', dateDebut: '', dateFin: '', lieuDepart: '', lieuRetour: '', gpsDepart: '', gpsRetour: '', affaires: '', urgences: '', notes: '' });
 
   const load = async () => {
     if (!session.patrouille) return;
@@ -733,10 +851,12 @@ function Weekends({ session, onToast }: { session: Session; onToast: (m: string)
     const { error } = await supabase.from('weekends').insert({
       titre: form.titre.trim(), date_debut: form.dateDebut || null, date_fin: form.dateFin || null,
       lieu_depart: form.lieuDepart || null, lieu_retour: form.lieuRetour || null,
-      affaires: form.affaires || null, urgences: form.urgences || null, patrouille_id: session.patrouille.id,
+      gps_depart: form.gpsDepart || null, gps_retour: form.gpsRetour || null,
+      affaires: form.affaires || null, urgences: form.urgences || null, notes: form.notes || null,
+      patrouille_id: session.patrouille.id,
     });
     if (error) { onToast('Erreur'); return; }
-    setForm({ titre: '', dateDebut: '', dateFin: '', lieuDepart: '', lieuRetour: '', affaires: '', urgences: '' });
+    setForm({ titre: '', dateDebut: '', dateFin: '', lieuDepart: '', lieuRetour: '', gpsDepart: '', gpsRetour: '', affaires: '', urgences: '', notes: '' });
     setShowAdd(false); onToast('Week-end créé'); load();
   };
 
@@ -760,10 +880,11 @@ function Weekends({ session, onToast }: { session: Session; onToast: (m: string)
                 <div className="weekend-header"><div><span className="eyebrow">Week-end</span><h2>{w.titre}</h2></div>{canManage && <button className="row-menu" onClick={() => del(w.id)}><X size={16} /></button>}</div>
                 <div className="weekend-info-row"><CalendarDays size={20} /><div><span className="input-label">Début</span><b>{w.date_debut ? new Date(w.date_debut).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : 'À définir'}</b></div></div>
                 <div className="weekend-info-row"><CalendarDays size={20} /><div><span className="input-label">Fin</span><b>{w.date_fin ? new Date(w.date_fin).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : 'À définir'}</b></div></div>
-                {w.lieu_depart && <div className="weekend-info-row"><Navigation size={20} /><div><span className="input-label">Départ</span><b>{w.lieu_depart}</b></div><button className="gps-button-small" onClick={() => openGPS(w.lieu_depart!)}><Navigation size={15} /> GPS</button></div>}
-                {w.lieu_retour && <div className="weekend-info-row"><MapPin size={20} /><div><span className="input-label">Retour</span><b>{w.lieu_retour}</b></div><button className="gps-button-small" onClick={() => openGPS(w.lieu_retour!)}><MapPin size={15} /> GPS</button></div>}
+                 {w.lieu_depart && <div className="weekend-info-row"><Navigation size={20} /><div><span className="input-label">Départ</span><b>{w.lieu_depart}</b>{w.gps_depart && <small>{w.gps_depart}</small>}</div><button className="gps-button-small" onClick={() => openGPS(w.gps_depart || w.lieu_depart!)}><Navigation size={15} /> GPS</button></div>}
+                 {w.lieu_retour && <div className="weekend-info-row"><MapPin size={20} /><div><span className="input-label">Retour</span><b>{w.lieu_retour}</b>{w.gps_retour && <small>{w.gps_retour}</small>}</div><button className="gps-button-small" onClick={() => openGPS(w.gps_retour || w.lieu_retour!)}><MapPin size={15} /> GPS</button></div>}
                 {w.affaires && <div className="weekend-section"><span className="input-label">Affaires à prendre</span><p className="checklist-text">{w.affaires}</p></div>}
                 {w.urgences && <div className="weekend-section alert"><TriangleAlert size={15} /><p>{w.urgences}</p></div>}
+                 {w.notes && <div className="weekend-section"><span className="input-label">Notes</span><p className="checklist-text">{w.notes}</p></div>}
               </div>
             ))}
           </div>
@@ -776,8 +897,10 @@ function Weekends({ session, onToast }: { session: Session; onToast: (m: string)
               <label>Titre<input value={form.titre} onChange={(e) => setForm({ ...form, titre: e.target.value })} placeholder="Ex: Week-end de rentrée" autoFocus /></label>
               <div className="form-row"><label>Début<input type="datetime-local" value={form.dateDebut} onChange={(e) => setForm({ ...form, dateDebut: e.target.value })} /></label><label>Fin<input type="datetime-local" value={form.dateFin} onChange={(e) => setForm({ ...form, dateFin: e.target.value })} /></label></div>
               <div className="form-row"><label>Lieu de départ<input value={form.lieuDepart} onChange={(e) => setForm({ ...form, lieuDepart: e.target.value })} placeholder="Ex: Parking du local" /></label><label>Lieu de retour<input value={form.lieuRetour} onChange={(e) => setForm({ ...form, lieuRetour: e.target.value })} placeholder="Ex: Forêt" /></label></div>
+               <div className="form-row"><label>GPS départ<input value={form.gpsDepart} onChange={(e) => setForm({ ...form, gpsDepart: e.target.value })} placeholder="Adresse ou coordonnées" /></label><label>GPS retour<input value={form.gpsRetour} onChange={(e) => setForm({ ...form, gpsRetour: e.target.value })} placeholder="Adresse ou coordonnées" /></label></div>
               <label>Affaires (une par ligne)<textarea value={form.affaires} onChange={(e) => setForm({ ...form, affaires: e.target.value })} placeholder={'Duvet\nGamelle\nBottes'} rows={4} /></label>
               <label>Urgences / infos (optionnel)<textarea value={form.urgences} onChange={(e) => setForm({ ...form, urgences: e.target.value })} placeholder="Ex: Contact d'urgence" rows={2} /></label>
+               <label>Notes (optionnel)<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Informations pratiques supplémentaires" rows={2} /></label>
               <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setShowAdd(false)}>Annuler</button><button className="primary-button" disabled={!form.titre.trim()}><Check size={17} /> Créer</button></div>
             </form>
           </div>
@@ -924,7 +1047,25 @@ function MaterielView({ session, onToast }: { session: Session; onToast: (m: str
   const canManage = canManageLogistics(session);
   const statuts = [{ k: 'EN_STOCK', l: 'En stock', c: 'green' }, { k: 'A_REPARER', l: 'À réparer', c: 'gold' }, { k: 'A_REMPLACER', l: 'À remplacer', c: 'coral' }, { k: 'A_ACHETER', l: 'À acheter', c: 'blue' }];
   const toBuy = items.filter((i) => i.statut === 'A_ACHETER' || i.statut === 'A_REMPLACER');
-  const totalEstimate = toBuy.reduce((s, i) => s + (i.prix_estime ?? 0), 0);
+  const totalEstimate = toBuy.reduce((s, i) => s + (i.prix_estime ?? 0) * i.quantite, 0);
+
+  const validatePurchase = async (item: Materiel) => {
+    if (!item.prix_estime || item.prix_estime <= 0 || !session.patrouille) {
+      onToast('Ajoute un prix estimé avant de valider l’achat');
+      return;
+    }
+    const { error: transactionError } = await supabase.from('transactions').insert({
+      titre: `Matériel : ${item.nom}`,
+      montant: item.prix_estime * item.quantite,
+      type: 'DEPENSE',
+      categorie: 'MATERIEL',
+      patrouille_id: session.patrouille.id,
+    });
+    if (transactionError) { onToast('Dépense non enregistrée'); return; }
+    const { error } = await supabase.from('materiels').update({ statut: 'EN_STOCK' }).eq('id', item.id);
+    if (error) { onToast('Achat enregistré, statut à vérifier'); return; }
+    onToast('Achat validé — dépense enregistrée'); load();
+  };
 
   return (
     <>
@@ -935,7 +1076,8 @@ function MaterielView({ session, onToast }: { session: Session; onToast: (m: str
           <div className="pharmacy-list">
             {toBuy.map((item) => (
               <div className="pharmacy-row" key={item.id}>
-                <div className="pharmacy-info"><b>{item.nom}</b><small>{item.categorie}{item.prix_estime ? ` · ${item.prix_estime} €` : ''}{item.fournisseur ? ` · ${item.fournisseur}` : ''}</small></div>
+                 <div className="pharmacy-info"><b>{item.nom}</b><small>Qté : {item.quantite}{item.prix_estime ? ` · ${item.prix_estime} € / unité` : ''}{item.fournisseur ? ` · ${item.fournisseur}` : ''}</small></div>
+                 {canManage && <button className="secondary-button" onClick={() => validatePurchase(item)}><Check size={14} /> Achat validé</button>}
               </div>
             ))}
           </div>
@@ -983,6 +1125,7 @@ function Courses({ session, onToast }: { session: Session; onToast: (m: string) 
   const [items, setItems] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [newItem, setNewItem] = useState('');
+  const [newEstimate, setNewEstimate] = useState('');
 
   const load = async () => {
     if (!session.patrouille) return;
@@ -996,9 +1139,13 @@ function Courses({ session, onToast }: { session: Session; onToast: (m: string) 
 
   const add = async () => {
     if (!newItem.trim() || !session.patrouille) return;
-    const { error } = await supabase.from('courses').insert({ nom: newItem.trim(), quantite: 1, patrouille_id: session.patrouille.id });
+    const { error } = await supabase.from('courses').insert({
+      nom: newItem.trim(), quantite: 1,
+      montant_estime: newEstimate ? parseFloat(newEstimate) : null,
+      patrouille_id: session.patrouille.id,
+    });
     if (error) { onToast('Erreur'); return; }
-    setNewItem(''); onToast('Ajouté'); load();
+    setNewItem(''); setNewEstimate(''); onToast('Ajouté'); load();
   };
 
   const toggle = async (item: Course) => {
@@ -1021,14 +1168,17 @@ function Courses({ session, onToast }: { session: Session; onToast: (m: string) 
   };
 
   const canManage = canManageLogistics(session);
+  const estimatedTotal = items.reduce((sum, item) => sum + (item.montant_estime ?? 0) * item.quantite, 0);
 
   return (
     <>
       <PageHeading eyebrow="Intendance" title="Courses" description="Liste de courses et validation des dépenses." />
       <div className="add-checklist-row" style={{ marginBottom: '20px' }}>
         <input value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="Ex: Pain" onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), add())} />
+        <input type="number" step="0.01" value={newEstimate} onChange={(e) => setNewEstimate(e.target.value)} placeholder="Estimé €" aria-label="Montant estimé" />
         <button className="primary-button" onClick={add}><Plus size={16} /> Ajouter</button>
       </div>
+      {items.length > 0 && <p className="list-summary"><ShoppingBag size={15} /> {items.filter((item) => !item.achete).length} article{items.filter((item) => !item.achete).length > 1 ? 's' : ''} restant{items.filter((item) => !item.achete).length > 1 ? 's' : ''} · estimé {estimatedTotal.toFixed(2)} €</p>}
       {loading ? <div className="loading-screen" style={{ minHeight: '200px' }}><div className="spinner" /></div>
         : items.length === 0 ? <div className="empty-state"><ShoppingBag size={40} /><p>La liste est vide.</p></div>
         : (
@@ -1036,8 +1186,9 @@ function Courses({ session, onToast }: { session: Session; onToast: (m: string) 
             {items.map((i) => (
               <div className={`task-item ${i.achete ? 'done' : ''}`} key={i.id}>
                 <button className="task-check" onClick={() => toggle(i)}>{i.achete && <Check size={14} />}</button>
-                <span>{i.nom}</span>
+                <span><b>{i.nom}</b><small>{i.quantite > 1 ? `Qté : ${i.quantite} · ` : ''}{i.montant_estime ? `Estimé : ${i.montant_estime.toFixed(2)} €` : 'Pas d’estimation'}</small></span>
                 {canManage && !i.valide && i.achete && <input type="number" step="0.01" placeholder="Prix réel €" onBlur={(e) => supabase.from('courses').update({ montant_reel: parseFloat(e.target.value) || null }).eq('id', i.id).then(() => load())} style={{ width: '90px' }} />}
+                {canManage && !i.valide && i.achete && <input className="ticket-input" value={i.ticket_url ?? ''} onChange={(e) => setItems((current) => current.map((course) => course.id === i.id ? { ...course, ticket_url: e.target.value } : course))} onBlur={(e) => supabase.from('courses').update({ ticket_url: e.target.value.trim() || null }).eq('id', i.id)} placeholder="Ticket URL" aria-label={`Ticket de ${i.nom}`} />}
                 {canManage && i.achete && i.montant_reel && !i.valide && <button className="primary-button" onClick={() => validate(i)}><Check size={14} /> Valider</button>}
                 {i.valide && <span className="role-tag" style={{ marginLeft: 'auto' }}>Validé {i.montant_reel}€</span>}
                 {canManage && <button className="row-menu" onClick={() => remove(i.id)}><X size={14} /></button>}
@@ -1169,7 +1320,14 @@ function Urgences({ session }: { session: Session }) {
   useEffect(() => {
     if (!session.patrouille) return;
     (async () => {
-      const { data: us } = await supabase.from('users').select('*').eq('patrouille_id', session.patrouille!.id).neq('role', 'PARENT').order('prenom');
+      let childIds: string[] | null = null;
+      if (isParent(session)) {
+        const { data: relations } = await supabase.from('parent_relations').select('enfant_id').eq('parent_id', session.user.id);
+        childIds = (relations ?? []).map((relation) => relation.enfant_id);
+      }
+      let usersQuery = supabase.from('users').select('*').eq('patrouille_id', session.patrouille!.id).neq('role', 'PARENT').order('prenom');
+      if (childIds) usersQuery = usersQuery.in('id', childIds);
+      const { data: us } = await usersQuery;
       setMembers(us ?? []);
       const today = new Date().toISOString();
       const { data: wk } = await supabase.from('weekends').select('*').eq('patrouille_id', session.patrouille!.id).gte('date_debut', today).order('date_debut').limit(1).maybeSingle();
@@ -1210,9 +1368,13 @@ function Accounts({ session, onToast }: { session: Session; onToast: (m: string)
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ prenom: '', code: '', role: 'MEMBRE', place: 'AUTRE' });
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editForm, setEditForm] = useState({ prenom: '', role: 'MEMBRE', place: 'AUTRE' });
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferTarget, setTransferTarget] = useState('');
   const [showDelete, setShowDelete] = useState<User | null>(null);
+  const [relationParent, setRelationParent] = useState<User | null>(null);
+  const [relationChildren, setRelationChildren] = useState<string[]>([]);
 
   const load = async () => {
     if (!session.patrouille) return;
@@ -1236,27 +1398,72 @@ function Accounts({ session, onToast }: { session: Session; onToast: (m: string)
   };
 
   const toggleStatut = async (u: User) => {
+    if (u.role === 'CP' && u.statut === 'ACTIF' && cpCount <= 1) {
+      onToast('Désigne un nouveau CP avant de désactiver le dernier CP');
+      return;
+    }
     const newStatut = u.statut === 'ACTIF' ? 'DESACTIVE' : 'ACTIF';
-    await supabase.from('users').update({ statut: newStatut }).eq('id', u.id);
+    const { error } = await supabase.from('users').update({ statut: newStatut }).eq('id', u.id);
+    if (error) { onToast('Impossible de modifier ce compte'); return; }
     onToast(newStatut === 'ACTIF' ? 'Compte réactivé' : 'Compte désactivé'); load();
   };
 
   const resetCode = async (u: User) => {
     const newCode = prompt(`Nouveau code d'accès pour ${u.prenom}:`);
     if (!newCode || newCode.length < 4) { onToast('Code trop court'); return; }
-    await supabase.from('users').update({ code_secret: newCode }).eq('id', u.id);
+    const { error } = await supabase.from('users').update({ code_secret: newCode.trim() }).eq('id', u.id);
+    if (error) { onToast('Ce code est déjà utilisé'); return; }
     onToast('Code réinitialisé'); load();
+  };
+
+  const startEdit = (u: User) => {
+    setEditingUser(u);
+    setEditForm({ prenom: u.prenom, role: u.role, place: u.place });
+  };
+
+  const saveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser || !editForm.prenom.trim()) return;
+    if (editingUser.role === 'CP' && editForm.role !== 'CP' && cpCount <= 1) {
+      onToast('Désigne un nouveau CP avant de modifier ce rôle');
+      return;
+    }
+    const { error } = await supabase.from('users').update({
+      prenom: editForm.prenom.trim(), role: editForm.role, place: editForm.role === 'CP' ? 'CP' : editForm.place,
+    }).eq('id', editingUser.id);
+    if (error) { onToast('Impossible de modifier ce compte'); return; }
+    setEditingUser(null); onToast('Compte mis à jour'); load();
+  };
+
+  const openRelations = async (parent: User) => {
+    const { data } = await supabase.from('parent_relations').select('enfant_id').eq('parent_id', parent.id);
+    setRelationParent(parent);
+    setRelationChildren((data ?? []).map((relation) => relation.enfant_id));
+  };
+
+  const toggleRelation = async (childId: string) => {
+    if (!relationParent) return;
+    if (relationChildren.includes(childId)) {
+      const { error } = await supabase.from('parent_relations').delete().eq('parent_id', relationParent.id).eq('enfant_id', childId);
+      if (error) { onToast('Impossible de dissocier cet enfant'); return; }
+      setRelationChildren((current) => current.filter((id) => id !== childId));
+    } else {
+      const { error } = await supabase.from('parent_relations').insert({ parent_id: relationParent.id, enfant_id: childId });
+      if (error) { onToast('Impossible d’associer cet enfant'); return; }
+      setRelationChildren((current) => [...current, childId]);
+    }
   };
 
   const deleteAccount = async () => {
     if (!showDelete) return;
-    await supabase.from('users').delete().eq('id', showDelete.id);
+    const { error } = await supabase.from('users').delete().eq('id', showDelete.id);
+    if (error) { onToast('Impossible de supprimer ce compte'); return; }
     onToast('Compte supprimé'); setShowDelete(null); load();
   };
 
   const doTransfer = async () => {
     if (!transferTarget) { onToast('Sélectionne un membre'); return; }
-    const { error } = await transferCP(transferTarget, session.user.id, 'MEMBRE', 'AUTRE');
+    const { error } = await transferCP(transferTarget, session.user.id);
     if (error) { onToast(error); return; }
     onToast('Responsabilité CP transférée');
     setShowTransfer(false);
@@ -1264,6 +1471,7 @@ function Accounts({ session, onToast }: { session: Session; onToast: (m: string)
   };
 
   const cpCount = users.filter((u) => u.role === 'CP' && u.statut === 'ACTIF').length;
+  const memberUsers = users.filter((u) => u.role !== 'PARENT' && u.id !== session.user.id && u.statut === 'ACTIF');
 
   return (
     <>
@@ -1277,8 +1485,10 @@ function Accounts({ session, onToast }: { session: Session; onToast: (m: string)
                 <div className="account-info"><b>{u.prenom}</b><small>{u.role} · {placeLabel(u.place)}</small></div>
                 <span className={`status-badge ${u.statut === 'ACTIF' ? 'active' : 'disabled'}`}>{u.statut === 'ACTIF' ? '🟢 Actif' : '🔴 Désactivé'}</span>
                 <div className="account-actions">
+                  <button className="row-menu" onClick={() => startEdit(u)}>Modifier</button>
                   <button className="row-menu" onClick={() => resetCode(u)}>Code</button>
                   <button className="row-menu" onClick={() => toggleStatut(u)}>{u.statut === 'ACTIF' ? 'Désactiver' : 'Activer'}</button>
+                  {u.role === 'PARENT' && <button className="row-menu" onClick={() => openRelations(u)}>Enfants</button>}
                   {u.role !== 'CP' && <button className="row-menu" onClick={() => setShowDelete(u)}>Supprimer</button>}
                 </div>
               </div>
@@ -1303,8 +1513,41 @@ function Accounts({ session, onToast }: { session: Session; onToast: (m: string)
           <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
             <div className="modal-heading"><div><span className="eyebrow">Transfert de responsabilité</span><h2>Transférer le CP</h2></div><button className="icon-button" onClick={() => setShowTransfer(false)}><X size={18} /></button></div>
             <p style={{ color: '#84938a', fontSize: '13px', lineHeight: 1.6, marginBottom: '16px' }}>Sélectionne le membre qui deviendra le nouveau CP. Tu deviendras MEMBRE après le transfert.</p>
-            <label>Nouveau CP<select value={transferTarget} onChange={(e) => setTransferTarget(e.target.value)}><option value="">Sélectionner…</option>{users.filter((u) => u.id !== session.user.id && u.statut === 'ACTIF').map((u) => <option key={u.id} value={u.id}>{u.prenom}</option>)}</select></label>
+             <label>Nouveau CP<select value={transferTarget} onChange={(e) => setTransferTarget(e.target.value)}><option value="">Sélectionner…</option>{memberUsers.map((u) => <option key={u.id} value={u.id}>{u.prenom}</option>)}</select></label>
             <div className="modal-actions"><button className="secondary-button" onClick={() => setShowTransfer(false)}>Annuler</button><button className="primary-button danger" disabled={!transferTarget} onClick={doTransfer}><ShieldCheck size={17} /> Transférer</button></div>
+          </div>
+        </div>
+      )}
+      {editingUser && (
+        <div className="modal-backdrop" onMouseDown={() => setEditingUser(null)}>
+          <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="modal-heading"><div><span className="eyebrow">Compte</span><h2>Modifier {editingUser.prenom}</h2></div><button className="icon-button" onClick={() => setEditingUser(null)}><X size={18} /></button></div>
+            <form onSubmit={saveEdit}>
+              <label>Prénom<input value={editForm.prenom} onChange={(e) => setEditForm({ ...editForm, prenom: e.target.value })} autoFocus /></label>
+              <div className="form-row">
+                <label>Rôle<select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}><option value="CP">CP</option><option value="SP">SP</option><option value="HP">HP</option><option value="MEMBRE">Membre</option><option value="PARENT">Parent</option></select></label>
+                <label>Place<select value={editForm.place} disabled={editForm.role === 'CP'} onChange={(e) => setEditForm({ ...editForm, place: e.target.value })}><option value="AUTRE">Autre</option><option value="SP">SP</option><option value="TROISIEME">3e</option><option value="QUATRIEME">4e</option><option value="CINQUIEME">5e</option><option value="SIXIEME">6e</option><option value="SEPTIEME">7e</option><option value="HUITIEME">8e</option></select></label>
+              </div>
+              <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setEditingUser(null)}>Annuler</button><button className="primary-button"><Check size={17} /> Enregistrer</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+      {relationParent && (
+        <div className="modal-backdrop" onMouseDown={() => setRelationParent(null)}>
+          <div className="modal modal-wide" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="modal-heading"><div><span className="eyebrow">Famille</span><h2>Enfants de {relationParent.prenom}</h2></div><button className="icon-button" onClick={() => setRelationParent(null)}><X size={18} /></button></div>
+            <p className="modal-help">Coche les membres visibles par ce parent dans son espace.</p>
+            <div className="relation-list">
+              {users.filter((u) => u.role !== 'PARENT').map((child) => (
+                <label className="relation-row" key={child.id}>
+                  <input type="checkbox" checked={relationChildren.includes(child.id)} onChange={() => toggleRelation(child.id)} />
+                  <span className={`avatar avatar-${avatarColor(child.role)}`}>{initials(child.prenom)}</span>
+                  <span><b>{child.prenom}</b><small>{placeLabel(child.place)} · {child.role}</small></span>
+                </label>
+              ))}
+            </div>
+            <div className="modal-actions"><button className="primary-button" onClick={() => setRelationParent(null)}>Terminer</button></div>
           </div>
         </div>
       )}
@@ -1331,6 +1574,7 @@ function setSessionNull() {
 function SettingsView({ session, onToast }: { session: Session; onToast: (m: string) => void }) {
   const [oldCode, setOldCode] = useState('');
   const [newCode, setNewCode] = useState('');
+  const [logoUrl, setLogoUrl] = useState(session.patrouille?.logo_url ?? '');
   const [busy, setBusy] = useState(false);
 
   const changeCode = async (e: React.FormEvent) => {
@@ -1345,6 +1589,18 @@ function SettingsView({ session, onToast }: { session: Session; onToast: (m: str
     setOldCode(''); setNewCode(''); onToast('Code mis à jour');
   };
 
+  const saveLogo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!session.patrouille || !isCP(session)) return;
+    setBusy(true);
+    const { error } = await supabase.from('patrouilles').update({ logo_url: logoUrl.trim() || null }).eq('id', session.patrouille.id);
+    setBusy(false);
+    if (error) { onToast('Impossible de mettre à jour le logo'); return; }
+    session.patrouille.logo_url = logoUrl.trim() || null;
+    storeSession(session);
+    onToast('Logo mis à jour');
+  };
+
   return (
     <>
       <PageHeading eyebrow="Mon compte" title="Paramètres" description="Modifie ton code d'accès." />
@@ -1356,6 +1612,17 @@ function SettingsView({ session, onToast }: { session: Session; onToast: (m: str
           <button className="primary-button" disabled={busy}><Check size={17} /> Mettre à jour</button>
         </form>
       </section>
+      {isCP(session) && (
+        <section className="panel" style={{ maxWidth: '500px', marginTop: '20px' }}>
+          <div className="panel-heading"><div><span className="eyebrow">Identité</span><h2>Logo de la patrouille</h2></div></div>
+          <p className="modal-help">Le logo est affiché à la connexion et dans la navigation.</p>
+          <form onSubmit={saveLogo} className="auth-form" style={{ maxWidth: '400px' }}>
+            <label><span className="input-label">URL du logo</span><input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://…" /></label>
+            <div className="logo-preview">{logoUrl ? <img src={logoUrl} alt="Aperçu du logo" /> : <span>🐆</span>}<small>{logoUrl ? 'Aperçu' : 'Logo Serval par défaut'}</small></div>
+            <button className="primary-button" disabled={busy}><Check size={17} /> Enregistrer le logo</button>
+          </form>
+        </section>
+      )}
     </>
   );
 }

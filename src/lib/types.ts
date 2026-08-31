@@ -127,8 +127,11 @@ export type Weekend = {
   date_fin: string | null;
   lieu_depart: string | null;
   lieu_retour: string | null;
+  gps_depart: string | null;
+  gps_retour: string | null;
   affaires: string | null;
   urgences: string | null;
+  notes: string | null;
   patrouille_id: string;
   created_at: string;
 };

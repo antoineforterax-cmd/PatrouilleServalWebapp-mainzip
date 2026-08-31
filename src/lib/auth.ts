@@ -139,20 +139,10 @@ export function isCP(s: Session): boolean {
 export async function transferCP(
   newCPUserId: string,
   oldCPUserId: string,
-  oldRole: string,
-  oldPlace: string
 ): Promise<{ error?: string }> {
-  const { error: e1 } = await supabase
-    .from('users')
-    .update({ role: 'CP', place: 'CP' })
-    .eq('id', newCPUserId);
-  if (e1) return { error: 'Erreur lors du transfert.' };
-
-  const { error: e2 } = await supabase
-    .from('users')
-    .update({ role: oldRole, place: oldPlace })
-    .eq('id', oldCPUserId);
-  if (e2) return { error: 'Erreur lors du transfert.' };
-
-  return {};
+  const { error } = await supabase.rpc('transfer_cp', {
+    new_cp_id: newCPUserId,
+    old_cp_id: oldCPUserId,
+  });
+  return error ? { error: 'Erreur lors du transfert. Vérifie que la migration v4 est appliquée.' } : {};
 }

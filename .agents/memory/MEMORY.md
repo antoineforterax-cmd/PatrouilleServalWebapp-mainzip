@@ -1,0 +1,1 @@
+- [Choix de stack SquadCraft](imported-stack-decision.md) — conserver Vite/React/Supabase pour faire évoluer la partie déjà réalisée.
