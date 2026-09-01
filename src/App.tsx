@@ -38,8 +38,9 @@ import type {
 } from '@/lib/types';
 import {
   clearSession, checkAnyUserExists, getStoredSession, initCT,
-  isCP, isParent, canManageMembers, canManageLogistics, canManageTreasury,
-  canManageAnnonces, canManageChat, login, storeSession, transferCP,
+  isCP, isParent, canManageMembers, canManageWeekends, canManagePharmacy,
+  canManageMateriel, canManageCourses, canManageTreasury, canManageAnnonces,
+  canManageChat, login, storeSession, transferCP,
 } from '@/lib/auth';
 
 const BADGE_CATALOG = [
@@ -75,8 +76,8 @@ export default function App() {
 /* ── Init ──────────────────────────────────────────────── */
 
 function InitScreen({ onDone }: { onDone: (s: Session) => void }) {
-  const [prenom, setPrenom] = useState('');
-  const [code, setCode] = useState('');
+  const [prenom, setPrenom] = useState('Antoine');
+  const [code, setCode] = useState('Nautiques70+');
   const [patrouille, setPatrouille] = useState('Patrouille du Serval');
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -830,7 +831,7 @@ function Weekends({ session, onToast }: { session: Session; onToast: (m: string)
     onToast('Week-end supprimé'); load();
   };
 
-  const canManage = canManageLogistics(session);
+  const canManage = canManageWeekends(session);
   const openGPS = (lieu: string) => window.open(`https://www.google.com/maps?q=${encodeURIComponent(lieu)}`, '_blank');
 
   return (
@@ -915,7 +916,7 @@ function Pharmacy({ session, onToast }: { session: Session; onToast: (m: string)
     load();
   };
 
-  const canManage = canManageLogistics(session);
+  const canManage = canManagePharmacy(session);
   const today = new Date().toISOString().split('T')[0];
   const soon = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
   const cats = [{ k: 'BOBOLOGIE', l: 'Bobologie & Soins' }, { k: 'TRAUMATOLOGIE', l: 'Traumatologie' }, { k: 'MEDICAMENTS', l: 'Médicaments' }];
@@ -974,6 +975,7 @@ function MaterielView({ session, onToast }: { session: Session; onToast: (m: str
   const [items, setItems] = useState<Materiel[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [activeTab, setActiveTab] = useState<'TOUS' | 'A_REMPLACER' | 'A_ACHETER' | 'A_REPARER' | 'EN_STOCK'>('TOUS');
   const [form, setForm] = useState({ nom: '', categorie: 'TENTES', statut: 'EN_STOCK', quantite: '1', prixEstime: '', fournisseur: '', notes: '' });
 
   const load = async () => {
@@ -1009,10 +1011,18 @@ function MaterielView({ session, onToast }: { session: Session; onToast: (m: str
     onToast('Supprimé'); load();
   };
 
-  const canManage = canManageLogistics(session);
+  const canManage = canManageMateriel(session);
   const statuts = [{ k: 'EN_STOCK', l: 'En stock', c: 'green' }, { k: 'A_REPARER', l: 'À réparer', c: 'gold' }, { k: 'A_REMPLACER', l: 'À remplacer', c: 'coral' }, { k: 'A_ACHETER', l: 'À acheter', c: 'blue' }];
   const toBuy = items.filter((i) => i.statut === 'A_ACHETER' || i.statut === 'A_REMPLACER');
   const totalEstimate = toBuy.reduce((s, i) => s + (i.prix_estime ?? 0) * i.quantite, 0);
+  const visibleItems = activeTab === 'TOUS' ? items : items.filter((item) => item.statut === activeTab);
+  const tabItems = [
+    { k: 'TOUS' as const, label: 'Tout', count: items.length },
+    { k: 'A_REMPLACER' as const, label: 'À remplacer', count: items.filter((item) => item.statut === 'A_REMPLACER').length },
+    { k: 'A_ACHETER' as const, label: 'À acheter', count: items.filter((item) => item.statut === 'A_ACHETER').length },
+    { k: 'A_REPARER' as const, label: 'À réparer', count: items.filter((item) => item.statut === 'A_REPARER').length },
+    { k: 'EN_STOCK' as const, label: 'En stock', count: items.filter((item) => item.statut === 'EN_STOCK').length },
+  ];
 
   const validatePurchase = async (item: Materiel) => {
     if (!item.prix_estime || item.prix_estime <= 0 || !session.patrouille) {
@@ -1048,13 +1058,27 @@ function MaterielView({ session, onToast }: { session: Session; onToast: (m: str
           </div>
         </div>
       )}
+      <div className="inventory-tabs" role="tablist" aria-label="Filtrer le matériel">
+        {tabItems.map((tab) => (
+          <button
+            key={tab.k}
+            role="tab"
+            aria-selected={activeTab === tab.k}
+            className={`inventory-tab ${activeTab === tab.k ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.k)}
+          >
+            {tab.label}<span>{tab.count}</span>
+          </button>
+        ))}
+      </div>
       {loading ? <div className="loading-screen" style={{ minHeight: '200px' }}><div className="spinner" /></div>
         : items.length === 0 ? <div className="empty-state"><Package size={40} /><p>Aucun matériel.</p></div>
+        : visibleItems.length === 0 ? <div className="empty-state"><Package size={40} /><p>Aucun article dans cet onglet.</p></div>
         : (
           <div className="table-panel">
             <div className="inventory-table">
               <div className="table-header"><span>Article</span><span>Catégorie</span><span>Statut</span><span /></div>
-              {items.map((item) => (
+              {visibleItems.map((item) => (
                 <div className="table-row" key={item.id}>
                   <div className="item-name"><span className="item-icon"><Package size={18} /></span><span><b>{item.nom}</b><small>Qt: {item.quantite}{item.prix_estime ? ` · ${item.prix_estime} €` : ''}</small></span></div>
                   <span className="location">{item.categorie}</span>
@@ -1114,6 +1138,7 @@ function Courses({ session, onToast }: { session: Session; onToast: (m: string) 
   };
 
   const toggle = async (item: Course) => {
+    if (!canManage) return;
     await supabase.from('courses').update({ achete: !item.achete }).eq('id', item.id);
     load();
   };
@@ -1132,17 +1157,19 @@ function Courses({ session, onToast }: { session: Session; onToast: (m: string) 
     load();
   };
 
-  const canManage = canManageLogistics(session);
+  const canManage = canManageCourses(session);
   const estimatedTotal = items.reduce((sum, item) => sum + (item.montant_estime ?? 0) * item.quantite, 0);
 
   return (
     <>
       <PageHeading eyebrow="Intendance" title="Courses" description="Liste de courses et validation des dépenses." />
-      <div className="add-checklist-row" style={{ marginBottom: '20px' }}>
-        <input value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="Ex: Pain" onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), add())} />
-        <input type="number" step="0.01" value={newEstimate} onChange={(e) => setNewEstimate(e.target.value)} placeholder="Estimé €" aria-label="Montant estimé" />
-        <button className="primary-button" onClick={add}><Plus size={16} /> Ajouter</button>
-      </div>
+      {canManage && (
+        <div className="add-checklist-row" style={{ marginBottom: '20px' }}>
+          <input value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="Ex: Pain" onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), add())} />
+          <input type="number" step="0.01" value={newEstimate} onChange={(e) => setNewEstimate(e.target.value)} placeholder="Estimé €" aria-label="Montant estimé" />
+          <button className="primary-button" onClick={add}><Plus size={16} /> Ajouter</button>
+        </div>
+      )}
       {items.length > 0 && <p className="list-summary"><ShoppingBag size={15} /> {items.filter((item) => !item.achete).length} article{items.filter((item) => !item.achete).length > 1 ? 's' : ''} restant{items.filter((item) => !item.achete).length > 1 ? 's' : ''} · estimé {estimatedTotal.toFixed(2)} €</p>}
       {loading ? <div className="loading-screen" style={{ minHeight: '200px' }}><div className="spinner" /></div>
         : items.length === 0 ? <div className="empty-state"><ShoppingBag size={40} /><p>La liste est vide.</p></div>
@@ -1150,7 +1177,9 @@ function Courses({ session, onToast }: { session: Session; onToast: (m: string) 
           <div className="task-list">
             {items.map((i) => (
               <div className={`task-item ${i.achete ? 'done' : ''}`} key={i.id}>
-                <button className="task-check" onClick={() => toggle(i)}>{i.achete && <Check size={14} />}</button>
+                 {canManage
+                   ? <button className="task-check" onClick={() => toggle(i)}>{i.achete && <Check size={14} />}</button>
+                   : <span className={`task-check ${i.achete ? '' : 'empty'}`}>{i.achete && <Check size={14} />}</span>}
                 <span><b>{i.nom}</b><small>{i.quantite > 1 ? `Qté : ${i.quantite} · ` : ''}{i.montant_estime ? `Estimé : ${i.montant_estime.toFixed(2)} €` : 'Pas d’estimation'}</small></span>
                 {canManage && !i.valide && i.achete && <input type="number" step="0.01" placeholder="Prix réel €" onBlur={(e) => supabase.from('courses').update({ montant_reel: parseFloat(e.target.value) || null }).eq('id', i.id).then(() => load())} style={{ width: '90px' }} />}
                 {canManage && !i.valide && i.achete && <input className="ticket-input" value={i.ticket_url ?? ''} onChange={(e) => setItems((current) => current.map((course) => course.id === i.id ? { ...course, ticket_url: e.target.value } : course))} onBlur={(e) => supabase.from('courses').update({ ticket_url: e.target.value.trim() || null }).eq('id', i.id)} placeholder="Ticket URL" aria-label={`Ticket de ${i.nom}`} />}
@@ -1332,9 +1361,9 @@ function Accounts({ session, onToast }: { session: Session; onToast: (m: string)
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ prenom: '', code: '', role: 'MEMBRE', place: 'AUTRE' });
+  const [form, setForm] = useState({ prenom: '', code: '', role: 'MEMBRE', place: 'AUTRE', roleTechnique: 'AUCUN' });
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [editForm, setEditForm] = useState({ prenom: '', role: 'MEMBRE', place: 'AUTRE' });
+  const [editForm, setEditForm] = useState({ prenom: '', role: 'MEMBRE', place: 'AUTRE', roleTechnique: 'AUCUN' });
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferTarget, setTransferTarget] = useState('');
   const [showDelete, setShowDelete] = useState<User | null>(null);
@@ -1356,10 +1385,11 @@ function Accounts({ session, onToast }: { session: Session; onToast: (m: string)
     if (!form.prenom.trim() || !form.code.trim() || !session.patrouille) return;
     const { error } = await supabase.from('users').insert({
       prenom: form.prenom.trim(), code_secret: form.code.trim(), role: form.role, place: form.place,
+      role_technique: form.roleTechnique,
       patrouille_id: session.patrouille.id, statut: 'ACTIF',
     });
     if (error) { onToast(error.message.includes('duplicate') ? 'Code existant' : 'Erreur'); return; }
-    setForm({ prenom: '', code: '', role: 'MEMBRE', place: 'AUTRE' }); setShowAdd(false); onToast('Compte créé'); load();
+    setForm({ prenom: '', code: '', role: 'MEMBRE', place: 'AUTRE', roleTechnique: 'AUCUN' }); setShowAdd(false); onToast('Compte créé'); load();
   };
 
   const toggleStatut = async (u: User) => {
@@ -1383,7 +1413,7 @@ function Accounts({ session, onToast }: { session: Session; onToast: (m: string)
 
   const startEdit = (u: User) => {
     setEditingUser(u);
-    setEditForm({ prenom: u.prenom, role: u.role, place: u.place });
+    setEditForm({ prenom: u.prenom, role: u.role, place: u.place, roleTechnique: u.role_technique ?? 'AUCUN' });
   };
 
   const saveEdit = async (e: React.FormEvent) => {
@@ -1395,6 +1425,7 @@ function Accounts({ session, onToast }: { session: Session; onToast: (m: string)
     }
     const { error } = await supabase.from('users').update({
       prenom: editForm.prenom.trim(), role: editForm.role, place: editForm.role === 'CP' ? 'CP' : editForm.place,
+      role_technique: editForm.roleTechnique,
     }).eq('id', editingUser.id);
     if (error) { onToast('Impossible de modifier ce compte'); return; }
     setEditingUser(null); onToast('Compte mis à jour'); load();
@@ -1447,7 +1478,7 @@ function Accounts({ session, onToast }: { session: Session; onToast: (m: string)
             {users.map((u) => (
               <div className="account-row" key={u.id}>
                 <span className={`avatar avatar-${avatarColor(u.role)}`}>{initials(u.prenom)}</span>
-                <div className="account-info"><b>{u.prenom}</b><small>{u.role} · {placeLabel(u.place)}</small></div>
+                <div className="account-info"><b>{u.prenom}</b><small>{u.role} · {placeLabel(u.place)}{u.role_technique && u.role_technique !== 'AUCUN' ? ` · ${roleTechLabel(u.role_technique)}` : ''}</small></div>
                 <span className={`status-badge ${u.statut === 'ACTIF' ? 'active' : 'disabled'}`}>{u.statut === 'ACTIF' ? '🟢 Actif' : '🔴 Désactivé'}</span>
                 <div className="account-actions">
                   <button className="row-menu" onClick={() => startEdit(u)}>Modifier</button>
@@ -1467,7 +1498,8 @@ function Accounts({ session, onToast }: { session: Session; onToast: (m: string)
             <form onSubmit={addUser}>
               <label>Prénom<input value={form.prenom} onChange={(e) => setForm({ ...form, prenom: e.target.value })} autoFocus /></label>
               <label>Code d'accès<input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="Ex: LUCAS-2026" /></label>
-              <div className="form-row"><label>Rôle<select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="MEMBRE">Membre</option><option value="SP">Second</option><option value="HP">HP</option><option value="PARENT">Parent</option></select></label><label>Place<select value={form.place} onChange={(e) => setForm({ ...form, place: e.target.value })}><option value="AUTRE">Autre</option><option value="SP">SP</option><option value="TROISIEME">3e</option><option value="QUATRIEME">4e</option><option value="CINQUIEME">5e</option><option value="SIXIEME">6e</option><option value="SEPTIEME">7e</option><option value="HUITIEME">8e</option></select></label></div>
+               <div className="form-row"><label>Rôle<select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="MEMBRE">Membre</option><option value="SP">Second</option><option value="HP">HP</option><option value="PARENT">Parent</option></select></label><label>Place<select value={form.place} onChange={(e) => setForm({ ...form, place: e.target.value })}><option value="AUTRE">Autre</option><option value="SP">SP</option><option value="TROISIEME">3e</option><option value="QUATRIEME">4e</option><option value="CINQUIEME">5e</option><option value="SIXIEME">6e</option><option value="SEPTIEME">7e</option><option value="HUITIEME">8e</option></select></label></div>
+               <label>Responsabilité technique<select value={form.roleTechnique} onChange={(e) => setForm({ ...form, roleTechnique: e.target.value })}><option value="AUCUN">Aucune</option><option value="SECOURISTE">Secouriste — pharmacie</option><option value="MATERIALISTE">Matérialiste — malle</option><option value="INTENDANT">Intendant — week-ends et courses</option><option value="TRESORIER">Trésorier — caisse</option><option value="TOPOGRAPHE">Topographe</option><option value="CUISINIER">Cuisinier</option><option value="MAITRE_FEU">Maître du feu</option><option value="RESP_PROPRETE">Resp. propreté</option><option value="PIONNIER">Pionnier</option></select></label>
               <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setShowAdd(false)}>Annuler</button><button className="primary-button" disabled={!form.prenom.trim() || !form.code.trim()}><Check size={17} /> Créer</button></div>
             </form>
           </div>
@@ -1493,6 +1525,7 @@ function Accounts({ session, onToast }: { session: Session; onToast: (m: string)
                 <label>Rôle<select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}><option value="CP">CP</option><option value="SP">SP</option><option value="HP">HP</option><option value="MEMBRE">Membre</option><option value="PARENT">Parent</option></select></label>
                 <label>Place<select value={editForm.place} disabled={editForm.role === 'CP'} onChange={(e) => setEditForm({ ...editForm, place: e.target.value })}><option value="AUTRE">Autre</option><option value="SP">SP</option><option value="TROISIEME">3e</option><option value="QUATRIEME">4e</option><option value="CINQUIEME">5e</option><option value="SIXIEME">6e</option><option value="SEPTIEME">7e</option><option value="HUITIEME">8e</option></select></label>
               </div>
+               <label>Responsabilité technique<select value={editForm.roleTechnique} onChange={(e) => setEditForm({ ...editForm, roleTechnique: e.target.value })}><option value="AUCUN">Aucune</option><option value="SECOURISTE">Secouriste — pharmacie</option><option value="MATERIALISTE">Matérialiste — malle</option><option value="INTENDANT">Intendant — week-ends et courses</option><option value="TRESORIER">Trésorier — caisse</option><option value="TOPOGRAPHE">Topographe</option><option value="CUISINIER">Cuisinier</option><option value="MAITRE_FEU">Maître du feu</option><option value="RESP_PROPRETE">Resp. propreté</option><option value="PIONNIER">Pionnier</option></select></label>
               <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setEditingUser(null)}>Annuler</button><button className="primary-button"><Check size={17} /> Enregistrer</button></div>
             </form>
           </div>

@@ -92,7 +92,12 @@ class LocalQuery implements PromiseLike<any> {
         const existing = this.operation === 'upsert' && item.nom ? rows.find((row) => row.nom === item.nom) : null;
         if (existing) Object.assign(existing, item);
         else {
-          const row = { id: item.id ?? localId(this.table), created_at: new Date().toISOString(), ...item };
+          const defaults = this.table === 'users'
+            ? { role: 'MEMBRE', place: 'AUTRE', role_technique: 'AUCUN', progression: 'AUCUNE', statut: 'ACTIF' }
+            : this.table === 'materiels'
+              ? { statut: 'EN_STOCK', quantite: 1 }
+              : {};
+          const row = { id: item.id ?? localId(this.table), created_at: new Date().toISOString(), ...defaults, ...item };
           rows.push(row); inserted.push(row);
         }
       });

@@ -19,9 +19,17 @@ Sans configuration supplémentaire, SquadCraft fonctionne en mode local :
 les prénoms, codes et modifications sont enregistrés dans le stockage du
 navigateur. Les données restent donc sur cet appareil et ce navigateur.
 
-Au premier lancement, crée ton propre compte CP et le nom de ta patrouille.
-Le CP peut ensuite créer les patrouillards et les comptes parents depuis
-**Comptes & Accès**.
+Au premier lancement, le formulaire propose le compte CP initial **Antoine**
+avec le code **Nautiques70+** (le CP peut ensuite changer ce code depuis
+Paramètres). Le CP peut ensuite créer les patrouillards et les comptes parents
+depuis **Comptes & Accès**, attribuer le rôle Second et les responsabilités
+techniques.
+
+Le CP est le seul administrateur des comptes, des codes et des rôles. Le Second
+peut gérer les modules opérationnels. Les responsabilités **Secouriste**,
+**Matérialiste**, **Intendant** et **Trésorier** donnent respectivement accès à
+la pharmacie, à la malle, aux week-ends/courses et à la trésorerie, sans donner
+accès à l'administration des comptes.
 
 ## Connexion Supabase (optionnelle)
 

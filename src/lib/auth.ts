@@ -116,16 +116,37 @@ export function canManageLogistics(s: Session): boolean {
   return s.user.role === 'CP' || s.user.role === 'SP';
 }
 
+/**
+ * Le CP garde l'administration des comptes et des rôles.
+ * Le SP peut piloter les modules opérationnels, tandis que les rôles
+ * techniques donnent accès uniquement à leur domaine de responsabilité.
+ */
+export function canManageWeekends(s: Session): boolean {
+  return s.user.role === 'CP' || s.user.role === 'SP' || s.user.role_technique === 'INTENDANT';
+}
+
+export function canManagePharmacy(s: Session): boolean {
+  return s.user.role === 'CP' || s.user.role === 'SP' || s.user.role_technique === 'SECOURISTE';
+}
+
+export function canManageMateriel(s: Session): boolean {
+  return s.user.role === 'CP' || s.user.role === 'SP' || s.user.role_technique === 'MATERIALISTE';
+}
+
+export function canManageCourses(s: Session): boolean {
+  return s.user.role === 'CP' || s.user.role === 'SP' || s.user.role_technique === 'INTENDANT';
+}
+
 export function canManageTreasury(s: Session): boolean {
-  return s.user.role === 'CP' || s.user.role === 'SP';
+  return s.user.role === 'CP' || s.user.role === 'SP' || s.user.role_technique === 'TRESORIER';
 }
 
 export function canManageAnnonces(s: Session): boolean {
-  return s.user.role === 'CP';
+  return s.user.role === 'CP' || s.user.role === 'SP';
 }
 
 export function canManageChat(s: Session): boolean {
-  return s.user.role === 'CP';
+  return s.user.role === 'CP' || s.user.role === 'SP';
 }
 
 export function isParent(s: Session): boolean {
