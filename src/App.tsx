@@ -9,6 +9,8 @@ import {
   Eye,
   EyeOff,
   Heart,
+  ImagePlus,
+  LockKeyhole,
   Loader2,
   LogOut,
   MapPin,
@@ -24,6 +26,7 @@ import {
   ShoppingBag,
   TentTree,
   TriangleAlert,
+  Utensils,
   UserCog,
   UserRound,
   Users,
@@ -34,13 +37,13 @@ import { supabase } from '@/lib/supabase';
 import type {
   User, Weekend, Materiel, Pharmacie, Transaction,
   Annonce, Message as ChatMessage, Badge, UserBadge, ParentRelation,
-  Course, View, Session,
+  Course, Repas, View, Session,
 } from '@/lib/types';
 import {
   clearSession, checkAnyUserExists, getStoredSession, initCT,
   isCP, isParent, canManageMembers, canManageWeekends, canManagePharmacy,
   canManageMateriel, canManageCourses, canManageTreasury, canManageAnnonces,
-  canManageChat, login, storeSession, transferCP,
+  canManageChat, canManageMeals, login, storeSession, transferCP,
 } from '@/lib/auth';
 
 const BADGE_CATALOG = [
@@ -48,6 +51,23 @@ const BADGE_CATALOG = [
   'Gabier', 'Pionnier', 'Reporter', 'Secouriste', 'Serviteur de la liturgie',
   'Sportif', 'Topographe', 'Transmetteur', 'Trappeur',
 ];
+
+const TECHNICAL_ROLE_OPTIONS = [
+  { value: 'TOPOGRAPHE', label: 'Topographe' },
+  { value: 'TRESORIER', label: 'Trésorier — caisse' },
+  { value: 'MATERIALISTE', label: 'Matérialiste — malle' },
+  { value: 'SECOURISTE', label: 'Secouriste — pharmacie' },
+  { value: 'INTENDANT', label: 'Intendant — week-ends et courses' },
+  { value: 'CUISINIER', label: 'Cuisinier — repas' },
+  { value: 'MAITRE_FEU', label: 'Maître du feu' },
+  { value: 'RESP_PROPRETE', label: 'Responsable propreté' },
+  { value: 'PIONNIER', label: 'Pionnier' },
+];
+
+const MAX_UPLOAD_IMAGES = 4;
+// Keep the browser-only mode under the usual localStorage quota when four
+// images are attached to the same announcement or message.
+const MAX_IMAGE_SIZE = 500 * 1024;
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -236,6 +256,7 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
         { id: 'chat', label: 'Chat', icon: MessageSquare },
         { id: 'members', label: 'Patrouillards', icon: Users },
         { id: 'weekends', label: 'Week-ends', icon: CalendarDays },
+         { id: 'repas', label: 'Repas', icon: Utensils },
         { id: 'pharmacy', label: 'Pharmacie', icon: Heart },
         { id: 'materiel', label: 'Malle & Matériel', icon: Package },
         { id: 'courses', label: 'Courses', icon: ShoppingBag },
@@ -287,6 +308,7 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
           {view === 'chat' && <Chat session={session} onToast={setToast} />}
           {view === 'members' && <Members session={session} onToast={setToast} />}
           {view === 'weekends' && <Weekends session={session} onToast={setToast} />}
+           {view === 'repas' && <Meals session={session} onToast={setToast} />}
           {view === 'pharmacy' && <Pharmacy session={session} onToast={setToast} />}
           {view === 'materiel' && <MaterielView session={session} onToast={setToast} />}
           {view === 'courses' && <Courses session={session} onToast={setToast} />}
@@ -417,7 +439,8 @@ function Annonces({ session, onToast }: { session: Session; onToast: (m: string)
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editingAnnonce, setEditingAnnonce] = useState<Annonce | null>(null);
-  const [form, setForm] = useState({ titre: '', contenu: '', imageUrl: '' });
+  const [form, setForm] = useState({ titre: '', contenu: '', imageUrls: [] as string[] });
+  const [imageError, setImageError] = useState('');
 
   const load = async () => {
     if (!session.patrouille) return;
@@ -434,13 +457,13 @@ function Annonces({ session, onToast }: { session: Session; onToast: (m: string)
     if (!form.titre.trim() || !form.contenu.trim() || !session.patrouille) return;
     const payload = {
       titre: form.titre.trim(), contenu: form.contenu.trim(),
-      image_url: form.imageUrl.trim() || null,
+      image_url: serializeStoredImages(form.imageUrls),
     };
     const { error } = editingAnnonce
       ? await supabase.from('annonces').update(payload).eq('id', editingAnnonce.id)
       : await supabase.from('annonces').insert({ ...payload, auteur_id: session.user.id, patrouille_id: session.patrouille.id });
     if (error) { onToast('Erreur'); return; }
-    setForm({ titre: '', contenu: '', imageUrl: '' }); setShowAdd(false); setEditingAnnonce(null);
+    setForm({ titre: '', contenu: '', imageUrls: [] }); setImageError(''); setShowAdd(false); setEditingAnnonce(null);
     onToast(editingAnnonce ? 'Annonce modifiée' : 'Annonce publiée'); load();
   };
 
@@ -453,7 +476,8 @@ function Annonces({ session, onToast }: { session: Session; onToast: (m: string)
 
   const startEdit = (annonce: Annonce) => {
     setEditingAnnonce(annonce);
-    setForm({ titre: annonce.titre, contenu: annonce.contenu, imageUrl: annonce.image_url ?? '' });
+    setForm({ titre: annonce.titre, contenu: annonce.contenu, imageUrls: parseStoredImages(annonce.image_url) });
+    setImageError('');
     setShowAdd(true);
   };
 
@@ -472,8 +496,8 @@ function Annonces({ session, onToast }: { session: Session; onToast: (m: string)
                   <div><span className="eyebrow">{new Date(a.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</span><h2>{a.titre}</h2></div>
                   {canManage && <div className="card-actions"><button className="row-menu" onClick={() => startEdit(a)}>Modifier</button><button className="row-menu" onClick={() => del(a.id)}><X size={16} /></button></div>}
                 </div>
-                <p className="annonce-contenu">{a.contenu}</p>
-                {a.image_url && <img src={a.image_url} alt={a.titre} className="annonce-image" />}
+               <p className="annonce-contenu">{a.contenu}</p>
+               <StoredImages value={a.image_url} alt={a.titre} className="annonce-images" />
               </div>
             ))}
           </div>
@@ -485,7 +509,7 @@ function Annonces({ session, onToast }: { session: Session; onToast: (m: string)
             <form onSubmit={add}>
               <label>Titre<input value={form.titre} onChange={(e) => setForm({ ...form, titre: e.target.value })} placeholder="Ex: Matériel du week-end" autoFocus /></label>
               <label>Contenu<textarea value={form.contenu} onChange={(e) => setForm({ ...form, contenu: e.target.value })} placeholder="N'oubliez pas les scies et les outils." rows={4} /></label>
-              <label>Image (URL, optionnel)<input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} placeholder="https://…" /></label>
+               <ImagePicker value={form.imageUrls} onChange={(imageUrls) => { setForm({ ...form, imageUrls }); setImageError(''); }} error={imageError} onError={setImageError} />
               <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => { setShowAdd(false); setEditingAnnonce(null); }}>Annuler</button><button className="primary-button" disabled={!form.titre.trim() || !form.contenu.trim()}><Check size={17} /> {editingAnnonce ? 'Enregistrer' : 'Publier'}</button></div>
             </form>
           </div>
@@ -500,8 +524,11 @@ function Annonces({ session, onToast }: { session: Session; onToast: (m: string)
 function Chat({ session, onToast }: { session: Session; onToast: (m: string) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [users, setUsers] = useState<Record<string, User>>({});
+  const [recipients, setRecipients] = useState<User[]>([]);
+  const [selectedRecipient, setSelectedRecipient] = useState('');
   const [text, setText] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [imageError, setImageError] = useState('');
   const [loading, setLoading] = useState(true);
   const [showClear, setShowClear] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -510,10 +537,21 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
     if (!session.patrouille) return;
     setLoading(true);
     const { data: msgs } = await supabase.from('messages').select('*').eq('patrouille_id', session.patrouille.id).order('created_at', { ascending: true });
-    setMessages(msgs ?? []);
-    const { data: us } = await supabase.from('users').select('*').eq('patrouille_id', session.patrouille.id);
+    const { data: us } = await supabase.from('users').select('*').eq('patrouille_id', session.patrouille.id).neq('role', 'PARENT').eq('statut', 'ACTIF').order('prenom');
+    const activeUsers = (us ?? []) as User[];
+    const availableRecipients = activeUsers.filter((user) => user.id !== session.user.id);
+    setRecipients(availableRecipients);
+    const recipientId = selectedRecipient && availableRecipients.some((user) => user.id === selectedRecipient)
+      ? selectedRecipient
+      : availableRecipients[0]?.id ?? '';
+    if (recipientId !== selectedRecipient) setSelectedRecipient(recipientId);
+    setMessages((msgs ?? []).filter((message) => {
+      if (!message.destinataire_id || !recipientId) return false;
+      return (message.auteur_id === session.user.id && message.destinataire_id === recipientId)
+        || (message.auteur_id === recipientId && message.destinataire_id === session.user.id);
+    }));
     const map: Record<string, User> = {};
-    (us ?? []).forEach((u) => { map[u.id] = u; });
+    activeUsers.forEach((u) => { map[u.id] = u; });
     setUsers(map);
     setLoading(false);
   };
@@ -522,7 +560,7 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
     load();
     const interval = setInterval(load, 5000);
     return () => clearInterval(interval);
-  }, [session]);
+  }, [session, selectedRecipient]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -530,13 +568,13 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!text.trim() || !session.patrouille) return;
+    if ((!text.trim() && imageUrls.length === 0) || !session.patrouille || !selectedRecipient) return;
     const { error } = await supabase.from('messages').insert({
-      auteur_id: session.user.id, patrouille_id: session.patrouille.id, contenu: text.trim(),
-      image_url: imageUrl.trim() || null,
+      auteur_id: session.user.id, destinataire_id: selectedRecipient, patrouille_id: session.patrouille.id, contenu: text.trim(),
+      image_url: serializeStoredImages(imageUrls),
     });
     if (error) { onToast('Erreur'); return; }
-    setText(''); setImageUrl(''); load();
+    setText(''); setImageUrls([]); setImageError(''); load();
   };
 
   const delMsg = async (id: string) => {
@@ -545,10 +583,9 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
   };
 
   const clearHistory = async () => {
-    if (!session.patrouille) return;
-    await supabase.from('messages').delete().eq('patrouille_id', session.patrouille.id);
+    await Promise.all(messages.map((message) => supabase.from('messages').delete().eq('id', message.id)));
     setShowClear(false);
-    onToast('Historique vidé');
+    onToast('Conversation vidée');
     load();
   };
 
@@ -557,6 +594,13 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
   return (
     <>
       <PageHeading eyebrow="Patrouille" title="Chat du Serval" description="Messagerie privée de la patrouille." action={canMod ? <button className="secondary-button" onClick={() => setShowClear(true)}><TriangleAlert size={16} /> Vider l'historique</button> : undefined} />
+      <div className="private-chat-toolbar">
+        <LockKeyhole size={17} />
+        <label htmlFor="chat-recipient">Conversation privée avec</label>
+        <select id="chat-recipient" value={selectedRecipient} onChange={(e) => setSelectedRecipient(e.target.value)} disabled={recipients.length === 0}>
+          {recipients.length === 0 ? <option value="">Aucun autre patrouillard</option> : recipients.map((recipient) => <option key={recipient.id} value={recipient.id}>{recipient.prenom}</option>)}
+        </select>
+      </div>
       <div className="chat-container">
         <div className="chat-messages" ref={scrollRef}>
           {loading ? <div className="loading-screen" style={{ minHeight: '200px' }}><div className="spinner" /></div>
@@ -570,7 +614,7 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
                   <div className="chat-msg-body">
                     <div className="chat-msg-header"><b>{author?.prenom ?? 'Inconnu'}</b><small>{new Date(m.created_at).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div>
                     <p>{m.contenu}</p>
-                     {m.image_url && <img src={m.image_url} alt="Image partagée dans le chat" className="chat-image" />}
+                     <StoredImages value={m.image_url} alt="Image partagée dans le chat" className="chat-images" />
                     {canMod && <button className="chat-delete" onClick={() => delMsg(m.id)}><X size={12} /></button>}
                   </div>
                 </div>
@@ -579,9 +623,9 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
           }
         </div>
         <form className="chat-input-bar" onSubmit={send}>
-           <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Écris ton message…" />
-           <input className="chat-image-input" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="URL image" aria-label="URL d'une image" />
-          <button className="primary-button" type="submit" disabled={!text.trim()}><ArrowUpRight size={18} /></button>
+           <input value={text} onChange={(e) => setText(e.target.value)} placeholder={selectedRecipient ? 'Écris ton message…' : 'Sélectionne un patrouillard…'} disabled={!selectedRecipient} />
+           <ImagePicker compact value={imageUrls} onChange={(value) => { setImageUrls(value); setImageError(''); }} error={imageError} onError={setImageError} />
+          <button className="primary-button" type="submit" disabled={(!text.trim() && imageUrls.length === 0) || !selectedRecipient}><ArrowUpRight size={18} /></button>
         </form>
       </div>
       {showClear && (
@@ -655,7 +699,7 @@ function Members({ session, onToast }: { session: Session; onToast: (m: string) 
                 </div>
                 <h3>{u.prenom}</h3>
                 <p>{placeLabel(u.place)} · {u.role}</p>
-                <span className="role-tag">{u.role_technique !== 'AUCUN' ? roleTechLabel(u.role_technique) : u.role}</span>
+                <span className="role-tag">{parseTechnicalRoles(u.role_technique).length > 0 ? roleTechLabel(u.role_technique) : u.role}</span>
                 {u.progression !== 'AUCUNE' && <span className="progression-badge">{progressionLabel(u.progression)}</span>}
               </div>
             ))}
@@ -672,7 +716,7 @@ function Members({ session, onToast }: { session: Session; onToast: (m: string) 
                 <label>Rôle<select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="MEMBRE">Membre</option><option value="SP">Second</option><option value="HP">HP</option></select></label>
                 <label>Place<select value={form.place} onChange={(e) => setForm({ ...form, place: e.target.value })}><option value="AUTRE">Autre</option><option value="CP">CP</option><option value="SP">SP</option><option value="TROISIEME">3e</option><option value="QUATRIEME">4e</option><option value="CINQUIEME">5e</option><option value="SIXIEME">6e</option><option value="SEPTIEME">7e</option><option value="HUITIEME">8e</option></select></label>
               </div>
-              <label>Rôle technique<select value={form.roleTechnique} onChange={(e) => setForm({ ...form, roleTechnique: e.target.value })}><option value="AUCUN">Aucun</option><option value="INTENDANT">Intendant</option><option value="SECOURISTE">Secouriste</option><option value="TRESORIER">Trésorier</option><option value="MATERIALISTE">Matérialiste</option><option value="CUISINIER">Cuisinier</option><option value="MAITRE_FEU">Maître du feu</option><option value="RESP_PROPRETE">Resp. propreté</option><option value="TOPOGRAPHE">Topographe</option><option value="PIONNIER">Pionnier</option></select></label>
+              <TechnicalRolePicker value={form.roleTechnique} onChange={(roleTechnique) => setForm({ ...form, roleTechnique })} />
               <label>Allergies / infos (optionnel)<input value={form.allergies} onChange={(e) => setForm({ ...form, allergies: e.target.value })} placeholder="Ex: allergie piqûres de guêpes" /></label>
               <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setShowAdd(false)}>Annuler</button><button className="primary-button" disabled={!form.prenom.trim() || !form.code.trim()}><Check size={17} /> Ajouter</button></div>
             </form>
@@ -688,7 +732,7 @@ function UserDetailModal({ user, session, onClose, onToast, onUpdate }: { user: 
   const [aspirations, setAspirations] = useState(user.aspirations ?? '');
   const [progression, setProgression] = useState(user.progression);
   const [place, setPlace] = useState(user.place);
-  const [roleTechnique, setRoleTechnique] = useState(user.role_technique);
+  const [roleTechnique, setRoleTechnique] = useState(user.role_technique ?? 'AUCUN');
   const [photoUrl, setPhotoUrl] = useState(user.photo_url ?? '');
   const [userBadges, setUserBadges] = useState<UserBadge[]>([]);
   const [allBadges, setAllBadges] = useState<Badge[]>([]);
@@ -747,7 +791,7 @@ function UserDetailModal({ user, session, onClose, onToast, onUpdate }: { user: 
         <div className="modal-heading"><div><span className="eyebrow">Fiche membre</span><h2>{user.prenom}</h2></div><button className="icon-button" onClick={onClose}><X size={18} /></button></div>
         <div className="user-detail-info">
            <span className={`avatar avatar-${avatarColor(user.role)}`}>{user.photo_url ? <img src={user.photo_url} alt="" /> : initials(user.prenom)}</span>
-          <div><b>{user.prenom}</b><small>{placeLabel(user.place)} · {user.role}</small>{user.role_technique !== 'AUCUN' && <small>{roleTechLabel(user.role_technique)}</small>}</div>
+          <div><b>{user.prenom}</b><small>{placeLabel(user.place)} · {user.role}</small>{parseTechnicalRoles(user.role_technique).length > 0 && <small>{roleTechLabel(user.role_technique)}</small>}</div>
         </div>
         {canEdit ? (
           <>
@@ -755,7 +799,7 @@ function UserDetailModal({ user, session, onClose, onToast, onUpdate }: { user: 
               <>
                 <div className="form-row">
                   <label>Place<select value={place} onChange={(e) => setPlace(e.target.value as User['place'])}><option value="AUTRE">Autre</option><option value="SP">SP</option><option value="TROISIEME">3e</option><option value="QUATRIEME">4e</option><option value="CINQUIEME">5e</option><option value="SIXIEME">6e</option><option value="SEPTIEME">7e</option><option value="HUITIEME">8e</option></select></label>
-                  <label>Rôle technique<select value={roleTechnique} onChange={(e) => setRoleTechnique(e.target.value as User['role_technique'])}><option value="AUCUN">Aucun</option><option value="TOPOGRAPHE">Topographe</option><option value="TRESORIER">Trésorier</option><option value="MATERIALISTE">Matérialiste</option><option value="SECOURISTE">Secouriste</option><option value="INTENDANT">Intendant</option><option value="CUISINIER">Cuisinier</option><option value="MAITRE_FEU">Maître du feu</option><option value="RESP_PROPRETE">Resp. propreté</option><option value="PIONNIER">Pionnier</option></select></label>
+                   <TechnicalRolePicker value={roleTechnique} onChange={setRoleTechnique} />
                 </div>
                 <label>Photo (URL, optionnel)<input value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} placeholder="https://…" /></label>
               </>
@@ -764,7 +808,7 @@ function UserDetailModal({ user, session, onClose, onToast, onUpdate }: { user: 
             <label>Aspirations / objectifs<textarea value={aspirations} onChange={(e) => setAspirations(e.target.value)} placeholder="Cette année je veux…" rows={3} /></label>
             {canManageMembers(session) && (
               <div className="badge-section">
-                <span className="input-label">Badges de spécialité</span>
+                <span className="input-label">Badges de spécialité (cumulables)</span>
                 <div className="badge-grid">
                   {BADGE_CATALOG.map((bn) => {
                     const st = badgeStatut(allBadges.find((b) => b.nom === bn)?.id ?? '');
@@ -833,6 +877,18 @@ function Weekends({ session, onToast }: { session: Session; onToast: (m: string)
 
   const canManage = canManageWeekends(session);
   const openGPS = (lieu: string) => window.open(`https://www.google.com/maps?q=${encodeURIComponent(lieu)}`, '_blank');
+  const fillCurrentPosition = (field: 'gpsDepart' | 'gpsRetour') => {
+    if (!navigator.geolocation) { onToast('La géolocalisation n’est pas disponible sur cet appareil'); return; }
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const coordinates = `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`;
+        setForm((current) => ({ ...current, [field]: coordinates }));
+        onToast('Position GPS ajoutée');
+      },
+      () => onToast('Position GPS indisponible. Vérifie l’autorisation du navigateur.'),
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  };
 
   return (
     <>
@@ -863,11 +919,107 @@ function Weekends({ session, onToast }: { session: Session; onToast: (m: string)
               <label>Titre<input value={form.titre} onChange={(e) => setForm({ ...form, titre: e.target.value })} placeholder="Ex: Week-end de rentrée" autoFocus /></label>
               <div className="form-row"><label>Début<input type="datetime-local" value={form.dateDebut} onChange={(e) => setForm({ ...form, dateDebut: e.target.value })} /></label><label>Fin<input type="datetime-local" value={form.dateFin} onChange={(e) => setForm({ ...form, dateFin: e.target.value })} /></label></div>
               <div className="form-row"><label>Lieu de départ<input value={form.lieuDepart} onChange={(e) => setForm({ ...form, lieuDepart: e.target.value })} placeholder="Ex: Parking du local" /></label><label>Lieu de retour<input value={form.lieuRetour} onChange={(e) => setForm({ ...form, lieuRetour: e.target.value })} placeholder="Ex: Forêt" /></label></div>
-               <div className="form-row"><label>GPS départ<input value={form.gpsDepart} onChange={(e) => setForm({ ...form, gpsDepart: e.target.value })} placeholder="Adresse ou coordonnées" /></label><label>GPS retour<input value={form.gpsRetour} onChange={(e) => setForm({ ...form, gpsRetour: e.target.value })} placeholder="Adresse ou coordonnées" /></label></div>
+                <div className="form-row"><label>GPS départ<div className="gps-field"><input value={form.gpsDepart} onChange={(e) => setForm({ ...form, gpsDepart: e.target.value })} placeholder="Adresse ou coordonnées" /><button type="button" className="gps-button-small" onClick={() => fillCurrentPosition('gpsDepart')} title="Utiliser ma position"><Navigation size={14} /></button></div></label><label>GPS retour<div className="gps-field"><input value={form.gpsRetour} onChange={(e) => setForm({ ...form, gpsRetour: e.target.value })} placeholder="Adresse ou coordonnées" /><button type="button" className="gps-button-small" onClick={() => fillCurrentPosition('gpsRetour')} title="Utiliser ma position"><MapPin size={14} /></button></div></label></div>
               <label>Affaires (une par ligne)<textarea value={form.affaires} onChange={(e) => setForm({ ...form, affaires: e.target.value })} placeholder={'Duvet\nGamelle\nBottes'} rows={4} /></label>
               <label>Urgences / infos (optionnel)<textarea value={form.urgences} onChange={(e) => setForm({ ...form, urgences: e.target.value })} placeholder="Ex: Contact d'urgence" rows={2} /></label>
                <label>Notes (optionnel)<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Informations pratiques supplémentaires" rows={2} /></label>
               <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setShowAdd(false)}>Annuler</button><button className="primary-button" disabled={!form.titre.trim()}><Check size={17} /> Créer</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ── Repas ─────────────────────────────────────────────── */
+
+function Meals({ session, onToast }: { session: Session; onToast: (m: string) => void }) {
+  const [meals, setMeals] = useState<Repas[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingMeal, setEditingMeal] = useState<Repas | null>(null);
+  const [form, setForm] = useState({ nom: '', moment: 'Dîner', date: '', details: '' });
+  const canManage = canManageMeals(session);
+
+  const load = async () => {
+    if (!session.patrouille) return;
+    setLoading(true);
+    const { data } = await supabase.from('repas').select('*').eq('patrouille_id', session.patrouille.id).order('date').order('created_at');
+    setMeals(data ?? []);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [session]);
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!form.nom.trim() || !session.patrouille || !canManage) return;
+    const payload = {
+      nom: form.nom.trim(),
+      moment: form.moment,
+      date: form.date || null,
+      details: form.details.trim() || null,
+    };
+    const { error } = editingMeal
+      ? await supabase.from('repas').update(payload).eq('id', editingMeal.id)
+      : await supabase.from('repas').insert({ ...payload, patrouille_id: session.patrouille.id });
+    if (error) { onToast('Impossible d’enregistrer le repas'); return; }
+    setForm({ nom: '', moment: 'Dîner', date: '', details: '' });
+    setEditingMeal(null);
+    setShowAdd(false);
+    onToast(editingMeal ? 'Repas modifié' : 'Repas ajouté');
+    load();
+  };
+
+  const startEdit = (meal: Repas) => {
+    setEditingMeal(meal);
+    setForm({ nom: meal.nom, moment: meal.moment, date: meal.date?.slice(0, 10) ?? '', details: meal.details ?? '' });
+    setShowAdd(true);
+  };
+
+  const remove = async (id: string) => {
+    if (!window.confirm('Supprimer ce repas ?')) return;
+    await supabase.from('repas').delete().eq('id', id);
+    onToast('Repas supprimé');
+    load();
+  };
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="Intendance"
+        title="Repas"
+        description="Le menu du week-end, réservé au Cuisinier et à l’Intendant."
+        action={canManage ? <button className="primary-button" onClick={() => { setEditingMeal(null); setForm({ nom: '', moment: 'Dîner', date: '', details: '' }); setShowAdd(true); }}><Plus size={18} /> Ajouter</button> : undefined}
+      />
+      {!canManage && <p className="access-note"><LockKeyhole size={15} /> Consultation uniquement. Le Cuisinier et l’Intendant peuvent modifier les repas.</p>}
+      {loading ? <div className="loading-screen" style={{ minHeight: '200px' }}><div className="spinner" /></div>
+        : meals.length === 0 ? <div className="empty-state"><Utensils size={40} /><p>Aucun repas planifié.</p></div>
+        : (
+          <div className="meals-list">
+            {meals.map((meal) => (
+              <article className="meal-card" key={meal.id}>
+                <div className="meal-card-icon"><Utensils size={20} /></div>
+                <div className="meal-card-info">
+                  <span className="eyebrow">{meal.date ? new Date(`${meal.date.slice(0, 10)}T12:00:00`).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Date à définir'} · {meal.moment}</span>
+                  <h2>{meal.nom}</h2>
+                  {meal.details && <p>{meal.details}</p>}
+                </div>
+                {canManage && <div className="meal-actions"><button className="row-menu" onClick={() => startEdit(meal)}>Modifier</button><button className="row-menu" onClick={() => remove(meal.id)}><X size={16} /></button></div>}
+              </article>
+            ))}
+          </div>
+        )}
+      {showAdd && (
+        <div className="modal-backdrop" onMouseDown={() => setShowAdd(false)}>
+          <div className="modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-heading"><div><span className="eyebrow">Menu</span><h2>{editingMeal ? 'Modifier le repas' : 'Ajouter un repas'}</h2></div><button className="icon-button" onClick={() => setShowAdd(false)}><X size={18} /></button></div>
+            <form onSubmit={save}>
+              <label>Nom du repas<input value={form.nom} onChange={(event) => setForm({ ...form, nom: event.target.value })} placeholder="Ex: Chili sin carne" autoFocus /></label>
+              <div className="form-row"><label>Moment<select value={form.moment} onChange={(event) => setForm({ ...form, moment: event.target.value })}><option>Petit-déjeuner</option><option>Déjeuner</option><option>Dîner</option><option>Goûter</option></select></label><label>Date<input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} /></label></div>
+              <label>Détails / régime<textarea value={form.details} onChange={(event) => setForm({ ...form, details: event.target.value })} placeholder="Quantités, allergies, organisation…" rows={3} /></label>
+              <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setShowAdd(false)}>Annuler</button><button className="primary-button" disabled={!form.nom.trim()}><Check size={17} /> Enregistrer</button></div>
             </form>
           </div>
         </div>
@@ -1478,7 +1630,7 @@ function Accounts({ session, onToast }: { session: Session; onToast: (m: string)
             {users.map((u) => (
               <div className="account-row" key={u.id}>
                 <span className={`avatar avatar-${avatarColor(u.role)}`}>{initials(u.prenom)}</span>
-                <div className="account-info"><b>{u.prenom}</b><small>{u.role} · {placeLabel(u.place)}{u.role_technique && u.role_technique !== 'AUCUN' ? ` · ${roleTechLabel(u.role_technique)}` : ''}</small></div>
+                <div className="account-info"><b>{u.prenom}</b><small>{u.role} · {placeLabel(u.place)}{parseTechnicalRoles(u.role_technique).length > 0 ? ` · ${roleTechLabel(u.role_technique)}` : ''}</small></div>
                 <span className={`status-badge ${u.statut === 'ACTIF' ? 'active' : 'disabled'}`}>{u.statut === 'ACTIF' ? '🟢 Actif' : '🔴 Désactivé'}</span>
                 <div className="account-actions">
                   <button className="row-menu" onClick={() => startEdit(u)}>Modifier</button>
@@ -1499,7 +1651,7 @@ function Accounts({ session, onToast }: { session: Session; onToast: (m: string)
               <label>Prénom<input value={form.prenom} onChange={(e) => setForm({ ...form, prenom: e.target.value })} autoFocus /></label>
               <label>Code d'accès<input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="Ex: LUCAS-2026" /></label>
                <div className="form-row"><label>Rôle<select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}><option value="MEMBRE">Membre</option><option value="SP">Second</option><option value="HP">HP</option><option value="PARENT">Parent</option></select></label><label>Place<select value={form.place} onChange={(e) => setForm({ ...form, place: e.target.value })}><option value="AUTRE">Autre</option><option value="SP">SP</option><option value="TROISIEME">3e</option><option value="QUATRIEME">4e</option><option value="CINQUIEME">5e</option><option value="SIXIEME">6e</option><option value="SEPTIEME">7e</option><option value="HUITIEME">8e</option></select></label></div>
-               <label>Responsabilité technique<select value={form.roleTechnique} onChange={(e) => setForm({ ...form, roleTechnique: e.target.value })}><option value="AUCUN">Aucune</option><option value="SECOURISTE">Secouriste — pharmacie</option><option value="MATERIALISTE">Matérialiste — malle</option><option value="INTENDANT">Intendant — week-ends et courses</option><option value="TRESORIER">Trésorier — caisse</option><option value="TOPOGRAPHE">Topographe</option><option value="CUISINIER">Cuisinier</option><option value="MAITRE_FEU">Maître du feu</option><option value="RESP_PROPRETE">Resp. propreté</option><option value="PIONNIER">Pionnier</option></select></label>
+                <TechnicalRolePicker value={form.roleTechnique} onChange={(roleTechnique) => setForm({ ...form, roleTechnique })} />
               <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setShowAdd(false)}>Annuler</button><button className="primary-button" disabled={!form.prenom.trim() || !form.code.trim()}><Check size={17} /> Créer</button></div>
             </form>
           </div>
@@ -1525,7 +1677,7 @@ function Accounts({ session, onToast }: { session: Session; onToast: (m: string)
                 <label>Rôle<select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}><option value="CP">CP</option><option value="SP">SP</option><option value="HP">HP</option><option value="MEMBRE">Membre</option><option value="PARENT">Parent</option></select></label>
                 <label>Place<select value={editForm.place} disabled={editForm.role === 'CP'} onChange={(e) => setEditForm({ ...editForm, place: e.target.value })}><option value="AUTRE">Autre</option><option value="SP">SP</option><option value="TROISIEME">3e</option><option value="QUATRIEME">4e</option><option value="CINQUIEME">5e</option><option value="SIXIEME">6e</option><option value="SEPTIEME">7e</option><option value="HUITIEME">8e</option></select></label>
               </div>
-               <label>Responsabilité technique<select value={editForm.roleTechnique} onChange={(e) => setEditForm({ ...editForm, roleTechnique: e.target.value })}><option value="AUCUN">Aucune</option><option value="SECOURISTE">Secouriste — pharmacie</option><option value="MATERIALISTE">Matérialiste — malle</option><option value="INTENDANT">Intendant — week-ends et courses</option><option value="TRESORIER">Trésorier — caisse</option><option value="TOPOGRAPHE">Topographe</option><option value="CUISINIER">Cuisinier</option><option value="MAITRE_FEU">Maître du feu</option><option value="RESP_PROPRETE">Resp. propreté</option><option value="PIONNIER">Pionnier</option></select></label>
+                <TechnicalRolePicker value={editForm.roleTechnique} onChange={(roleTechnique) => setEditForm({ ...editForm, roleTechnique })} />
               <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setEditingUser(null)}>Annuler</button><button className="primary-button"><Check size={17} /> Enregistrer</button></div>
             </form>
           </div>
@@ -1644,9 +1796,91 @@ function placeLabel(place: string): string {
   return l[place] ?? place;
 }
 
-function roleTechLabel(rt: string): string {
+function roleTechLabel(rt: string | null | undefined): string {
   const l: Record<string, string> = { TOPOGRAPHE: 'Topographe', TRESORIER: 'Trésorier', MATERIALISTE: 'Matérialiste', SECOURISTE: 'Secouriste', INTENDANT: 'Intendant', CUISINIER: 'Cuisinier', MAITRE_FEU: 'Maître du feu', RESP_PROPRETE: 'Resp. propreté', PIONNIER: 'Pionnier', AUCUN: '' };
-  return l[rt] ?? rt;
+  return parseTechnicalRoles(rt).map((role) => l[role] ?? role).filter(Boolean).join(' · ');
+}
+
+function parseTechnicalRoles(value: string | null | undefined): string[] {
+  if (!value || value === 'AUCUN') return [];
+  return value.split(',').map((role) => role.trim()).filter((role, index, all) => role && all.indexOf(role) === index);
+}
+
+function serializeTechnicalRoles(roles: string[]): string {
+  return roles.length ? roles.join(',') : 'AUCUN';
+}
+
+function TechnicalRolePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const selected = parseTechnicalRoles(value);
+  const toggle = (role: string) => {
+    const next = selected.includes(role) ? selected.filter((item) => item !== role) : [...selected, role];
+    onChange(serializeTechnicalRoles(next));
+  };
+  return (
+    <fieldset className="technical-role-picker">
+      <legend>Responsabilités techniques <small>(cumulables)</small></legend>
+      <div className="technical-role-grid">
+        {TECHNICAL_ROLE_OPTIONS.map((role) => (
+          <label className={`technical-role-option ${selected.includes(role.value) ? 'selected' : ''}`} key={role.value}>
+            <input type="checkbox" checked={selected.includes(role.value)} onChange={() => toggle(role.value)} />
+            <span>{role.label}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function parseStoredImages(value: string | null | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.filter((item): item is string => typeof item === 'string').slice(0, MAX_UPLOAD_IMAGES);
+  } catch {
+    // Les anciennes données contiennent une URL simple.
+  }
+  return [value];
+}
+
+function serializeStoredImages(images: string[]): string | null {
+  return images.length ? JSON.stringify(images.slice(0, MAX_UPLOAD_IMAGES)) : null;
+}
+
+function StoredImages({ value, alt, className }: { value: string | null | undefined; alt: string; className?: string }) {
+  const images = parseStoredImages(value);
+  if (images.length === 0) return null;
+  return <div className={`stored-images ${className ?? ''}`}>{images.map((image, index) => <img key={`${image.slice(0, 24)}-${index}`} src={image} alt={`${alt} ${index + 1}`} loading="lazy" />)}</div>;
+}
+
+function ImagePicker({ value, onChange, error, onError, compact = false }: { value: string[]; onChange: (value: string[]) => void; error?: string; onError?: (message: string) => void; compact?: boolean }) {
+  const inputId = `image-picker-${compact ? 'chat' : 'form'}`;
+  const addFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    const remaining = MAX_UPLOAD_IMAGES - value.length;
+    const selectedFiles = files.slice(0, remaining);
+    if (files.length > remaining) onError?.(`4 images maximum par publication.`);
+    const validFiles = selectedFiles.filter((file) => file.type.startsWith('image/') && file.size <= MAX_IMAGE_SIZE);
+    if (validFiles.length !== selectedFiles.length) onError?.(`Images uniquement, ${MAX_IMAGE_SIZE / 1024 / 1024} Mo maximum chacune.`);
+    const encoded = await Promise.all(validFiles.map((file) => new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error('lecture impossible'));
+      reader.readAsDataURL(file);
+    }).catch(() => null)));
+    onChange([...value, ...encoded.filter((image): image is string => Boolean(image))].slice(0, MAX_UPLOAD_IMAGES));
+    event.target.value = '';
+  };
+  return (
+    <div className={`image-picker ${compact ? 'compact' : ''}`}>
+      <div className="image-picker-head">
+        <label className="file-button" htmlFor={inputId}><ImagePlus size={16} /> {compact ? 'Image' : 'Ajouter des images'} <small>({value.length}/{MAX_UPLOAD_IMAGES})</small></label>
+        <input id={inputId} type="file" accept="image/*" multiple onChange={addFiles} disabled={value.length >= MAX_UPLOAD_IMAGES} />
+      </div>
+      {!compact && <small className="field-help">Depuis l’ordinateur · 4 images maximum · 2 Mo par image</small>}
+      {value.length > 0 && <div className="image-picker-previews">{value.map((image, index) => <div className="image-preview" key={`${image.slice(0, 24)}-${index}`}><img src={image} alt={`Aperçu ${index + 1}`} /><button type="button" onClick={() => onChange(value.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Retirer l'image ${index + 1}`}><X size={13} /></button></div>)}</div>}
+      {error && <small className="field-error">{error}</small>}
+    </div>
+  );
 }
 
 function progressionLabel(p: string): string {

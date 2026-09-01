@@ -23,7 +23,8 @@ export type User = {
   code_secret: string;
   role: RoleSysteme;
   place: PlacePatrouille;
-  role_technique: RoleTechnique;
+  /** Valeur historique simple ou liste CSV de responsabilités techniques. */
+  role_technique: RoleTechnique | string;
   progression: NiveauProgression;
   badges: string | null;
   aspirations: string | null;
@@ -46,9 +47,20 @@ export type Annonce = {
 export type Message = {
   id: string;
   auteur_id: string | null;
+  destinataire_id: string | null;
   patrouille_id: string;
   contenu: string;
   image_url: string | null;
+  created_at: string;
+};
+
+export type Repas = {
+  id: string;
+  nom: string;
+  moment: string;
+  date: string | null;
+  details: string | null;
+  patrouille_id: string;
   created_at: string;
 };
 
@@ -136,7 +148,7 @@ export type Weekend = {
   created_at: string;
 };
 
-export type View = 'overview' | 'annonces' | 'chat' | 'members' | 'weekends' | 'pharmacy' | 'materiel' | 'courses' | 'treasury' | 'urgences' | 'settings' | 'accounts';
+export type View = 'overview' | 'annonces' | 'chat' | 'members' | 'weekends' | 'repas' | 'pharmacy' | 'materiel' | 'courses' | 'treasury' | 'urgences' | 'settings' | 'accounts';
 
 export type Session = {
   user: User;

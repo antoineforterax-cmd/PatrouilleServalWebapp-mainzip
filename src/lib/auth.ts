@@ -116,29 +116,49 @@ export function canManageLogistics(s: Session): boolean {
   return s.user.role === 'CP' || s.user.role === 'SP';
 }
 
+export function hasTechnicalRole(session: Session, role: string): boolean {
+  return session.user.role === 'CP'
+    || session.user.role === 'SP'
+    || String(session.user.role_technique ?? '')
+      .split(',')
+      .map((item) => item.trim())
+      .includes(role);
+}
+
+function hasAssignedTechnicalRole(session: Session, role: string): boolean {
+  return String(session.user.role_technique ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .includes(role);
+}
+
 /**
  * Le CP garde l'administration des comptes et des rôles.
  * Le SP peut piloter les modules opérationnels, tandis que les rôles
  * techniques donnent accès uniquement à leur domaine de responsabilité.
  */
 export function canManageWeekends(s: Session): boolean {
-  return s.user.role === 'CP' || s.user.role === 'SP' || s.user.role_technique === 'INTENDANT';
+  return hasTechnicalRole(s, 'INTENDANT');
 }
 
 export function canManagePharmacy(s: Session): boolean {
-  return s.user.role === 'CP' || s.user.role === 'SP' || s.user.role_technique === 'SECOURISTE';
+  return hasTechnicalRole(s, 'SECOURISTE');
 }
 
 export function canManageMateriel(s: Session): boolean {
-  return s.user.role === 'CP' || s.user.role === 'SP' || s.user.role_technique === 'MATERIALISTE';
+  return hasTechnicalRole(s, 'MATERIALISTE');
 }
 
 export function canManageCourses(s: Session): boolean {
-  return s.user.role === 'CP' || s.user.role === 'SP' || s.user.role_technique === 'INTENDANT';
+  return hasTechnicalRole(s, 'INTENDANT');
+}
+
+export function canManageMeals(s: Session): boolean {
+  return hasAssignedTechnicalRole(s, 'CUISINIER') || hasAssignedTechnicalRole(s, 'INTENDANT');
 }
 
 export function canManageTreasury(s: Session): boolean {
-  return s.user.role === 'CP' || s.user.role === 'SP' || s.user.role_technique === 'TRESORIER';
+  return hasTechnicalRole(s, 'TRESORIER');
 }
 
 export function canManageAnnonces(s: Session): boolean {

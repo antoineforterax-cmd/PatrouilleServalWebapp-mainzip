@@ -21,13 +21,18 @@ function emptyDatabase(): LocalDatabase {
     patrouilles: [], users: [], annonces: [], messages: [], badges: [],
     user_badges: [], parent_relations: [], materiels: [], pharmacies: [],
     transactions: [], courses: [], weekends: [],
+    repas: [],
   };
 }
 
 function readLocalDatabase(): LocalDatabase {
   try {
     const stored = localStorage.getItem(LOCAL_DB_KEY);
-    if (stored) return JSON.parse(stored) as LocalDatabase;
+    if (stored) {
+      const parsed = JSON.parse(stored) as LocalDatabase;
+      // Keep existing browser sessions compatible when a new local table is added.
+      return { ...emptyDatabase(), ...parsed };
+    }
   } catch {
     // Recreate a readable demo database if browser storage is unavailable.
   }
