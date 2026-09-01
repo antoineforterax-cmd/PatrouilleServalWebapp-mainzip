@@ -34,6 +34,17 @@ Le CP et le Second conservent leur accès opérationnel sur les autres modules ;
 la modification des repas reste volontairement réservée aux responsabilités
 **Cuisinier** et **Intendant**.
 
+### Espace parent
+
+Un compte **Parent** ne voit pas l’administration, les comptes, les membres,
+les repas ou les modules de gestion. Son espace est limité aux annonces,
+week-ends et lieux de rendez-vous, trousse de secours, urgences, cagnotte en
+lecture seule et chat privé avec les enfants qui lui sont associés. Le parent
+peut envoyer un message ou une image dans ce chat, mais ne peut pas modifier
+les annonces, les week-ends, la pharmacie ou la cagnotte. Le Second n’est pas
+inclus dans une conversation parent-enfant sauf s’il est lui-même associé
+comme enfant par le CP.
+
 Les badges se gèrent indépendamment les uns des autres dans la fiche de chaque
 patrouillard : chaque badge possède son propre état (à commencer, en cours ou
 validé), et plusieurs badges peuvent donc être suivis en même temps. Les

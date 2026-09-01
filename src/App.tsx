@@ -47,10 +47,27 @@ import {
 } from '@/lib/auth';
 
 const BADGE_CATALOG = [
-  'Artisan', 'Astronome', 'Boute-en-train', 'Campeur', 'Cuisinier',
-  'Gabier', 'Pionnier', 'Reporter', 'Secouriste', 'Serviteur de la liturgie',
-  'Sportif', 'Topographe', 'Transmetteur', 'Trappeur',
+  'Artisan', 'Liturgiste', 'Secouriste', 'Cuisinier', 'Gabier', 'Sportif',
+  'Pionnier', 'Trappeur', 'Campeur', 'Transmetteur', 'Astronome',
+  'Première classe', 'Seconde classe', 'Promesse',
 ];
+
+const BADGE_IMAGES: Record<string, string> = {
+  Artisan: '/badges/artisan.png',
+  Liturgiste: '/badges/liturgiste.png',
+  Secouriste: '/badges/secouriste.png',
+  Cuisinier: '/badges/cuisinier.png',
+  Gabier: '/badges/gabier.png',
+  Sportif: '/badges/sportif.png',
+  Pionnier: '/badges/pionnier.png',
+  Trappeur: '/badges/trappeur.png',
+  Campeur: '/badges/campeur.png',
+  Transmetteur: '/badges/transmetteur.png',
+  Astronome: '/badges/astronome.png',
+  'Première classe': '/badges/premiere-classe.png',
+  'Seconde classe': '/badges/seconde-classe.png',
+  Promesse: '/badges/promesse.png',
+};
 
 const TECHNICAL_ROLE_OPTIONS = [
   { value: 'TOPOGRAPHE', label: 'Topographe' },
@@ -248,6 +265,9 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
         { id: 'overview', label: 'Tableau de bord', icon: BarChart3 },
         { id: 'annonces', label: 'Annonces', icon: Megaphone },
         { id: 'weekends', label: 'Week-ends', icon: TentTree },
+        { id: 'pharmacy', label: 'Trousse de secours', icon: Heart },
+        { id: 'treasury', label: 'Cagnotte', icon: Wallet },
+        { id: 'chat', label: 'Chat parents', icon: MessageSquare },
         { id: 'urgences', label: 'Urgences', icon: TriangleAlert },
       ]
     : [
@@ -305,7 +325,7 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
         <div className="content-wrap">
           {view === 'overview' && <Overview session={session} onNavigate={selectView} />}
           {view === 'annonces' && <Annonces session={session} onToast={setToast} />}
-          {view === 'chat' && <Chat session={session} onToast={setToast} />}
+          {view === 'chat' && (parent ? <ParentChat session={session} onToast={setToast} /> : <Chat session={session} onToast={setToast} />)}
           {view === 'members' && <Members session={session} onToast={setToast} />}
           {view === 'weekends' && <Weekends session={session} onToast={setToast} />}
            {view === 'repas' && <Meals session={session} onToast={setToast} />}
@@ -538,8 +558,17 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
     setLoading(true);
     const { data: msgs } = await supabase.from('messages').select('*').eq('patrouille_id', session.patrouille.id).order('created_at', { ascending: true });
     const { data: us } = await supabase.from('users').select('*').eq('patrouille_id', session.patrouille.id).neq('role', 'PARENT').eq('statut', 'ACTIF').order('prenom');
+    const { data: parentRelations } = await supabase.from('parent_relations').select('parent_id').eq('enfant_id', session.user.id);
+    const parentIds = (parentRelations ?? []).map((relation) => relation.parent_id);
+    const { data: linkedParents } = parentIds.length > 0
+      ? await supabase.from('users').select('*').in('id', parentIds).eq('statut', 'ACTIF').order('prenom')
+      : { data: [] };
     const activeUsers = (us ?? []) as User[];
+    const activeParents = (linkedParents ?? []) as User[];
     const availableRecipients = activeUsers.filter((user) => user.id !== session.user.id);
+    activeParents.forEach((parentUser) => {
+      if (!availableRecipients.some((recipient) => recipient.id === parentUser.id)) availableRecipients.push(parentUser);
+    });
     setRecipients(availableRecipients);
     const recipientId = selectedRecipient && availableRecipients.some((user) => user.id === selectedRecipient)
       ? selectedRecipient
@@ -613,7 +642,7 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
                    <span className={`avatar avatar-${avatarColor(author?.role ?? 'MEMBRE')}`}>{author?.photo_url ? <img src={author.photo_url} alt="" /> : initials(author?.prenom ?? '?')}</span>
                   <div className="chat-msg-body">
                     <div className="chat-msg-header"><b>{author?.prenom ?? 'Inconnu'}</b><small>{new Date(m.created_at).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div>
-                    <p>{m.contenu}</p>
+                     {m.contenu && <p>{m.contenu}</p>}
                      <StoredImages value={m.image_url} alt="Image partagée dans le chat" className="chat-images" />
                     {canMod && <button className="chat-delete" onClick={() => delMsg(m.id)}><X size={12} /></button>}
                   </div>
@@ -637,6 +666,113 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+/* ── Parent chat ───────────────────────────────────────── */
+
+function ParentChat({ session, onToast }: { session: Session; onToast: (m: string) => void }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [children, setChildren] = useState<User[]>([]);
+  const [users, setUsers] = useState<Record<string, User>>({});
+  const [selectedChild, setSelectedChild] = useState('');
+  const [text, setText] = useState('');
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [imageError, setImageError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const load = async () => {
+    if (!session.patrouille) return;
+    setLoading(true);
+    const { data: relations } = await supabase.from('parent_relations').select('enfant_id').eq('parent_id', session.user.id);
+    const childIds = (relations ?? []).map((relation) => relation.enfant_id);
+    const { data: childUsers } = childIds.length > 0
+      ? await supabase.from('users').select('*').in('id', childIds).eq('statut', 'ACTIF').order('prenom')
+      : { data: [] };
+    const activeChildren = (childUsers ?? []) as User[];
+    setChildren(activeChildren);
+    const childId = selectedChild && activeChildren.some((child) => child.id === selectedChild)
+      ? selectedChild
+      : activeChildren[0]?.id ?? '';
+    if (childId !== selectedChild) setSelectedChild(childId);
+
+    const { data: allMessages } = await supabase.from('messages').select('*').eq('patrouille_id', session.patrouille.id).order('created_at', { ascending: true });
+    setMessages((allMessages ?? []).filter((message) =>
+      message.destinataire_id && childId
+      && ((message.auteur_id === session.user.id && message.destinataire_id === childId)
+        || (message.auteur_id === childId && message.destinataire_id === session.user.id)),
+    ));
+    const map: Record<string, User> = {};
+    activeChildren.forEach((child) => { map[child.id] = child; });
+    map[session.user.id] = session.user;
+    setUsers(map);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 5000);
+    return () => clearInterval(interval);
+  }, [session, selectedChild]);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages]);
+
+  const send = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if ((!text.trim() && imageUrls.length === 0) || !selectedChild || !session.patrouille) return;
+    const { error } = await supabase.from('messages').insert({
+      auteur_id: session.user.id,
+      destinataire_id: selectedChild,
+      patrouille_id: session.patrouille.id,
+      contenu: text.trim(),
+      image_url: serializeStoredImages(imageUrls),
+    });
+    if (error) { onToast('Impossible d’envoyer le message'); return; }
+    setText('');
+    setImageUrls([]);
+    setImageError('');
+    load();
+  };
+
+  return (
+    <>
+      <PageHeading eyebrow="Espace parent" title="Chat avec la patrouille" description="Échange privé avec un ou plusieurs de vos enfants." />
+      <div className="private-chat-toolbar">
+        <LockKeyhole size={17} />
+        <label htmlFor="parent-chat-recipient">Conversation avec</label>
+        <select id="parent-chat-recipient" value={selectedChild} onChange={(event) => setSelectedChild(event.target.value)} disabled={children.length === 0}>
+          {children.length === 0 ? <option value="">Aucun enfant associé</option> : children.map((child) => <option key={child.id} value={child.id}>{child.prenom}</option>)}
+        </select>
+      </div>
+      <div className="chat-container">
+        <div className="chat-messages" ref={scrollRef}>
+          {loading ? <div className="loading-screen" style={{ minHeight: '200px' }}><div className="spinner" /></div>
+            : messages.length === 0 ? <div className="empty-state"><MessageSquare size={40} /><p>Aucun message dans cette conversation.</p></div>
+            : messages.map((message) => {
+              const author = users[message.auteur_id ?? ''];
+              const isMe = message.auteur_id === session.user.id;
+              return (
+                <div className={`chat-msg ${isMe ? 'me' : ''}`} key={message.id}>
+                  <span className={`avatar avatar-${avatarColor(author?.role ?? 'MEMBRE')}`}>{initials(author?.prenom ?? '?')}</span>
+                  <div className="chat-msg-body">
+                    <div className="chat-msg-header"><b>{author?.prenom ?? 'Inconnu'}</b><small>{new Date(message.created_at).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div>
+                    {message.contenu && <p>{message.contenu}</p>}
+                    <StoredImages value={message.image_url} alt="Image partagée dans le chat" className="chat-images" />
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+        <form className="chat-input-bar" onSubmit={send}>
+          <input value={text} onChange={(event) => setText(event.target.value)} placeholder={selectedChild ? 'Écrire au patrouillard…' : 'Aucun enfant associé'} disabled={!selectedChild} />
+          <ImagePicker compact value={imageUrls} onChange={(value) => { setImageUrls(value); setImageError(''); }} error={imageError} onError={setImageError} />
+          <button className="primary-button" type="submit" disabled={(!text.trim() && imageUrls.length === 0) || !selectedChild}><ArrowUpRight size={18} /></button>
+        </form>
+      </div>
     </>
   );
 }
@@ -700,7 +836,7 @@ function Members({ session, onToast }: { session: Session; onToast: (m: string) 
                 <h3>{u.prenom}</h3>
                 <p>{placeLabel(u.place)} · {u.role}</p>
                 <span className="role-tag">{parseTechnicalRoles(u.role_technique).length > 0 ? roleTechLabel(u.role_technique) : u.role}</span>
-                {u.progression !== 'AUCUNE' && <span className="progression-badge">{progressionLabel(u.progression)}</span>}
+                {u.progression !== 'AUCUNE' && <span className="progression-badge"><img src={BADGE_IMAGES[progressionBadgeName(u.progression)]} alt="" />{progressionLabel(u.progression)}</span>}
               </div>
             ))}
           </div>
@@ -743,10 +879,12 @@ function UserDetailModal({ user, session, onClose, onToast, onUpdate }: { user: 
       const { data: ub } = await supabase.from('user_badges').select('*').eq('user_id', user.id);
       setUserBadges(ub ?? []);
       let { data: ab } = await supabase.from('badges').select('*').order('nom');
-      if (!ab || ab.length === 0) {
-        await supabase.from('badges').upsert(BADGE_CATALOG.map((nom) => ({ nom })), { onConflict: 'nom', ignoreDuplicates: true });
-        const seeded = await supabase.from('badges').select('*').order('nom');
-        ab = seeded.data;
+      const existingBadgeNames = new Set((ab ?? []).map((badge) => badge.nom));
+      const missingBadges = BADGE_CATALOG.filter((nom) => !existingBadgeNames.has(nom));
+      if (missingBadges.length > 0) {
+        await supabase.from('badges').upsert(missingBadges.map((nom) => ({ nom })), { onConflict: 'nom', ignoreDuplicates: true });
+        const refreshed = await supabase.from('badges').select('*').order('nom');
+        ab = refreshed.data;
       }
       setAllBadges(ab ?? []);
     })();
@@ -817,7 +955,7 @@ function UserDetailModal({ user, session, onClose, onToast, onUpdate }: { user: 
                         const bid = allBadges.find((b) => b.nom === bn)?.id;
                         if (bid) { if (st) cycleBadgeStatut(bid, st); else toggleBadge(bid, null); }
                       }}>
-                        {st === 'VALIDE' && <Check size={12} />}{bn}
+                        <img src={BADGE_IMAGES[bn]} alt="" className="badge-image" />{st === 'VALIDE' && <Check size={12} />}{bn}
                       </button>
                     );
                   })}
@@ -1886,6 +2024,11 @@ function ImagePicker({ value, onChange, error, onError, compact = false }: { val
 function progressionLabel(p: string): string {
   const l: Record<string, string> = { AUCUNE: '', PROMESSE: 'Promesse', ASPIRANCE: 'Aspirance', SECONDE_CLASSE: 'Seconde classe', PREMIERE_CLASSE: 'Première classe' };
   return l[p] ?? p;
+}
+
+function progressionBadgeName(p: string): string {
+  const l: Record<string, string> = { PROMESSE: 'Promesse', SECONDE_CLASSE: 'Seconde classe', PREMIERE_CLASSE: 'Première classe' };
+  return l[p] ?? '';
 }
 
 function catLabel(c: string): string {

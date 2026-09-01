@@ -224,3 +224,22 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .meal-card { padding: 13px; }
   .meal-actions { flex-direction: column; }
 }
+
+.badge-image {
+  width: 25px;
+  height: 25px;
+  object-fit: contain;
+  border-radius: 50%;
+  flex: 0 0 25px;
+}
+.progression-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.progression-badge img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  border-radius: 50%;
+}
