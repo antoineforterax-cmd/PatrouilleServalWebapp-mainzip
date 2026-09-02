@@ -62,7 +62,7 @@ carte.
 
 Pour partager les mêmes données entre plusieurs appareils, il est possible
 d’activer Supabase. Renseigner alors ces variables dans les variables
-d’environnement Replit (ou dans un fichier `.env.local` local) :
+d’environnement du déploiement (ou dans un fichier `.env.local` local) :
 
 ```env
 VITE_SUPABASE_URL=https://<projet>.supabase.co
