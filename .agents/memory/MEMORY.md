@@ -1,2 +1,3 @@
 - [Choix de stack SquadCraft](imported-stack-decision.md) — conserver Vite/React/Supabase pour faire évoluer la partie déjà réalisée.
 - [Mode local SquadCraft](local-mode-decision.md) — rester utilisable sans Supabase avec une démo et une persistance navigateur.
+- [Registre npm en environnement Replit](npm-registry-portability.md) — l’environnement peut injecter un registre npm interne absent du dépôt.
