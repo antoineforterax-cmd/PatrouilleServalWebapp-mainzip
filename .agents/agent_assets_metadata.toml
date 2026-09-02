@@ -14,3 +14,17 @@ mtime_ms = 1788194829779
 storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:f1449eee-33a7-446c-b7eb-f0710548c071/bc3f1914-ced8-408a-876c-4391f504673d/4ac6f856-f012-4e23-9f74-8e0e349d05b1"
 storage_version_token = "1788194846347238"
 content_type = "image/png"
+
+[[outputs]]
+id = "zqPTntbwpl4gvNdhJ-fI9"
+uri = "file://exports/squadcraft-vercel.zip"
+type = "unspecified"
+title = "Projet SquadCraft prêt pour Vercel"
+description = "Archive ZIP du projet avec package-lock.json régénéré depuis le registre npm public. Les fichiers Replit, caches, node_modules et fichiers générés ont été exclus."
+logical_id = "f5e57d6b-0b8f-4866-9bc6-11ccdfcf083b"
+content_hash = "sha256:2796909bf4125c17210e0f6dae076301717bb54d5706af4716b000587b1a7f27"
+size = 1648404
+mtime_ms = 1788351205489
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:26a8badd-9b6b-4594-ba9d-adfafdce470f/f5e57d6b-0b8f-4866-9bc6-11ccdfcf083b/4eaf0f48-af1f-4472-ae5a-5dab35ca7c39"
+storage_version_token = "1788351213243740"
+content_type = "application/octet-stream"
