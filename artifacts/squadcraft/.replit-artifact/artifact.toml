@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "SquadCraft — Patrouille du Serval"
+description = "Centre de gestion privé pour la Patrouille du Serval, avec membres, progression, annonces, messagerie, week-ends, repas, matériel, pharmacie, trésorerie et accès parents."
+version = "1.0.0"
+id = "artifacts/squadcraft"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22627
+
+[services.development]
+run = "pnpm --filter @workspace/squadcraft run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/squadcraft", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/squadcraft/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22627"
+BASE_PATH = "/"

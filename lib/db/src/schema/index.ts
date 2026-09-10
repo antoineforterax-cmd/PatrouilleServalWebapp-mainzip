@@ -17,4 +17,28 @@
 //   export type InsertPost = z.infer<typeof insertPostSchema>;
 //   export type Post = typeof postsTable.$inferSelect;
 
-export {}
+import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+
+/** Server-owned document store for SquadCraft's existing table-shaped API. */
+export const squadcraftRows = pgTable("squadcraft_rows", {
+  id: uuid("id").primaryKey(),
+  tableName: text("table_name").notNull(),
+  payload: jsonb("payload").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const squadcraftUsers = pgTable("squadcraft_users", {
+  id: uuid("id").primaryKey(),
+  prenom: text("prenom").notNull(),
+  codeHash: text("code_hash").notNull(),
+  patrouilleId: uuid("patrouille_id"),
+  role: text("role").notNull().default("MEMBRE"),
+  statut: text("statut").notNull().default("ACTIF"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const squadcraftSessions = pgTable("squadcraft_sessions", {
+  id: text("id").primaryKey(),
+  userId: uuid("user_id").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
