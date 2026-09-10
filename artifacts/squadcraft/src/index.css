@@ -785,54 +785,6 @@ body {
   }
 }
 
-/* Real WebGL scene */
-.three-world {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.three-world canvas {
-  width: 100% !important;
-  height: 100% !important;
-  filter: saturate(1.12) contrast(1.02);
-}
-
-.three-world-auth {
-  opacity: .92;
-}
-
-.three-world-app {
-  opacity: .58;
-}
-
-.auth-screen > :not(.three-world),
-.app-shell > :not(.three-world):not(.ambient-grid):not(.ambient-orb) {
-  position: relative;
-  z-index: 2;
-}
-
-.auth-visual {
-  background: linear-gradient(145deg, rgba(18, 71, 53, .8), rgba(8, 48, 36, .76));
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-}
-
-.auth-panel {
-  position: relative;
-  z-index: 3;
-}
-
-.auth-panel-inner {
-  transform: translateZ(70px);
-}
-
-.main-content {
-  z-index: 2;
-}
-
 .patrol-chat-toolbar {
   display: flex;
   align-items: center;
@@ -846,6 +798,36 @@ body {
   box-shadow: 0 16px 36px rgba(29, 71, 52, .09), inset 0 1px rgba(255,255,255,.9);
   backdrop-filter: blur(20px) saturate(130%);
   -webkit-backdrop-filter: blur(20px) saturate(130%);
+}
+
+.chat-mode-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(255,255,255,.76);
+  border-radius: 13px;
+  background: rgba(235,242,236,.72);
+  box-shadow: inset 0 1px rgba(255,255,255,.9);
+}
+
+.chat-mode-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 14px;
+  color: #6f887b;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.chat-mode-switch button.active {
+  color: #fff;
+  background: linear-gradient(145deg, #245d47, #143e2f);
+  box-shadow: 0 8px 18px rgba(25,66,49,.2), inset 0 1px rgba(255,255,255,.15);
 }
 
 .patrol-chat-icon {
@@ -931,11 +913,13 @@ body {
 }
 
 @media (max-width: 620px) {
-  .three-world-auth {
-    opacity: .5;
+  .chat-mode-switch {
+    display: flex;
+    width: 100%;
   }
-  .three-world-app {
-    opacity: .38;
+  .chat-mode-switch button {
+    flex: 1;
+    justify-content: center;
   }
   .participant-stack .avatar:nth-child(n+4) {
     display: none;

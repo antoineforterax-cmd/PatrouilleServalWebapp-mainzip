@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   TentTree,
+  Trash2,
   TriangleAlert,
   Utensils,
   UserCog,
@@ -34,7 +35,6 @@ import {
   X,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import ThreeWorld from '@/components/ThreeWorld';
 import type {
   User, Weekend, Materiel, Pharmacie, Transaction,
   Annonce, Message as ChatMessage, Badge, UserBadge, ParentRelation,
@@ -132,14 +132,12 @@ function InitScreen({ onDone }: { onDone: (s: Session) => void }) {
 
   return (
     <div className="auth-screen">
-      <ThreeWorld variant="auth" />
       <div className="auth-visual">
         <div className="auth-visual-copy">
           <span className="eyebrow"><ShieldCheck size={15} /> Première installation</span>
           <h1>SquadCraft<br /><em>Serval.</em></h1>
           <p>Configure le compte Chef de Patrouille. Tu pourras ensuite créer les fiches de tes patrouillards et leurs parents.</p>
         </div>
-        <GlassScene />
         <div className="auth-sun" />
         <div className="auth-forest forest-one" />
         <div className="auth-forest forest-two" />
@@ -204,14 +202,12 @@ function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
 
   return (
     <div className="auth-screen">
-      <ThreeWorld variant="auth" />
       <div className="auth-visual">
         <div className="auth-visual-copy">
           <span className="eyebrow"><ShieldCheck size={15} /> Espace privé scout</span>
           <h1>SquadCraft<br /><em>Serval.</em></h1>
           <p>La gestion numérique de la Patrouille du Serval.</p>
         </div>
-        <GlassScene />
         <div className="auth-sun" />
         <div className="auth-forest forest-one" />
         <div className="auth-forest forest-two" />
@@ -296,10 +292,6 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
 
   return (
     <div className="app-shell">
-      <ThreeWorld />
-      <div className="ambient-orb ambient-orb-one" aria-hidden="true" />
-      <div className="ambient-orb ambient-orb-two" aria-hidden="true" />
-      <div className="ambient-grid" aria-hidden="true" />
       <aside className={`sidebar ${mobileOpen ? 'is-open' : ''}`}>
         <div className="brand-lockup">
           <img src={session.patrouille?.logo_url ?? '/serval-logo.png'} alt="Serval" className="brand-mark" />
@@ -352,31 +344,6 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
   );
 }
 
-function GlassScene() {
-  return (
-    <div className="glass-scene" aria-hidden="true">
-      <div className="scene-glow" />
-      <div className="scene-panel scene-panel-nav">
-        <span className="scene-logo"><img src="/serval-logo.png" alt="" /></span>
-        <i />
-        <i />
-        <i />
-        <i />
-      </div>
-      <div className="scene-panel scene-panel-main">
-        <span className="scene-chip">S</span>
-        <strong>SQUADCRAFT</strong>
-        <em>SERVAL.</em>
-        <div className="scene-input" />
-        <div className="scene-input short" />
-        <div className="scene-button" />
-      </div>
-      <div className="scene-metric scene-metric-green"><small>Caisse</small><b>0.00 €</b></div>
-      <div className="scene-metric scene-metric-gold"><small>Membres</small><b>2</b></div>
-      <div className="scene-metric scene-metric-blue"><small>Matériel</small><b>0</b></div>
-    </div>
-  );
-}
 
 /* ── Overview ─────────────────────────────────────────── */
 
@@ -577,9 +544,11 @@ function Annonces({ session, onToast }: { session: Session; onToast: (m: string)
 /* ── Chat ────────────────────────────────────────────── */
 
 function Chat({ session, onToast }: { session: Session; onToast: (m: string) => void }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [allMessages, setAllMessages] = useState<ChatMessage[]>([]);
   const [users, setUsers] = useState<Record<string, User>>({});
   const [participants, setParticipants] = useState<User[]>([]);
+  const [chatMode, setChatMode] = useState<'group' | 'private'>('group');
+  const [selectedRecipient, setSelectedRecipient] = useState('');
   const [text, setText] = useState('');
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [imageError, setImageError] = useState('');
@@ -594,7 +563,9 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
     const { data: us } = await supabase.from('users').select('*').eq('patrouille_id', session.patrouille.id).neq('role', 'PARENT').eq('statut', 'ACTIF').order('prenom');
     const activeUsers = (us ?? []) as User[];
     setParticipants(activeUsers);
-    setMessages((msgs ?? []).filter((message) => !message.destinataire_id));
+    setAllMessages((msgs ?? []) as ChatMessage[]);
+    const availableRecipients = activeUsers.filter((user) => user.id !== session.user.id);
+    setSelectedRecipient((current) => availableRecipients.some((user) => user.id === current) ? current : availableRecipients[0]?.id ?? '');
     const map: Record<string, User> = {};
     activeUsers.forEach((u) => { map[u.id] = u; });
     setUsers(map);
@@ -607,15 +578,26 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
     return () => clearInterval(interval);
   }, [session]);
 
+  const recipients = participants.filter((participant) => participant.id !== session.user.id);
+  const messages = allMessages.filter((message) => {
+    if (chatMode === 'group') return !message.destinataire_id;
+    if (!selectedRecipient || !message.destinataire_id) return false;
+    return (message.auteur_id === session.user.id && message.destinataire_id === selectedRecipient)
+      || (message.auteur_id === selectedRecipient && message.destinataire_id === session.user.id);
+  });
+
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!text.trim() && imageUrls.length === 0) || !session.patrouille) return;
+    if ((!text.trim() && imageUrls.length === 0) || !session.patrouille || (chatMode === 'private' && !selectedRecipient)) return;
     const { error } = await supabase.from('messages').insert({
-      auteur_id: session.user.id, destinataire_id: null, patrouille_id: session.patrouille.id, contenu: text.trim(),
+      auteur_id: session.user.id,
+      destinataire_id: chatMode === 'private' ? selectedRecipient : null,
+      patrouille_id: session.patrouille.id,
+      contenu: text.trim(),
       image_url: serializeStoredImages(imageUrls),
     });
     if (error) { onToast('Erreur'); return; }
@@ -630,15 +612,38 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
   const clearHistory = async () => {
     await Promise.all(messages.map((message) => supabase.from('messages').delete().eq('id', message.id)));
     setShowClear(false);
-    onToast('Conversation vidée');
+    onToast(chatMode === 'private' ? 'Discussion privée supprimée' : 'Salon de patrouille vidé');
     load();
   };
 
   const canMod = canManageChat(session);
+  const canClear = chatMode === 'private' || canMod;
+  const selectedUser = users[selectedRecipient];
 
   return (
     <>
-      <PageHeading eyebrow="Patrouille" title="Chat du Serval" description="Le salon commun de toute la patrouille." action={canMod ? <button className="secondary-button" onClick={() => setShowClear(true)}><TriangleAlert size={16} /> Vider l'historique</button> : undefined} />
+      <PageHeading
+        eyebrow="Patrouille"
+        title="Chat du Serval"
+        description={chatMode === 'group' ? 'Le salon commun de toute la patrouille.' : `Discussion privée${selectedUser ? ` avec ${selectedUser.prenom}` : ''}.`}
+        action={canClear && messages.length > 0 ? <button className="secondary-button" onClick={() => setShowClear(true)}><Trash2 size={16} /> {chatMode === 'group' ? "Vider l'historique" : 'Supprimer la discussion'}</button> : undefined}
+      />
+      <div className="chat-mode-switch" role="tablist" aria-label="Type de discussion">
+        <button className={chatMode === 'group' ? 'active' : ''} onClick={() => setChatMode('group')}><Users size={16} /> Patrouille</button>
+        <button className={chatMode === 'private' ? 'active' : ''} onClick={() => setChatMode('private')}><LockKeyhole size={16} /> Messages privés</button>
+      </div>
+      {chatMode === 'private' && (
+        <div className="private-chat-toolbar">
+          <LockKeyhole size={17} />
+          <label htmlFor="private-recipient">Discussion privée avec</label>
+          <select id="private-recipient" value={selectedRecipient} onChange={(event) => setSelectedRecipient(event.target.value)} disabled={recipients.length === 0}>
+            {recipients.length === 0
+              ? <option value="">Aucun autre patrouillard</option>
+              : recipients.map((recipient) => <option key={recipient.id} value={recipient.id}>{recipient.prenom} · {recipient.role === 'MEMBRE' ? 'Membre' : recipient.role}</option>)}
+          </select>
+        </div>
+      )}
+      {chatMode === 'group' && (
       <div className="patrol-chat-toolbar">
         <div className="patrol-chat-icon"><Users size={18} /></div>
         <div><b>Salon de la patrouille</b><small>{participants.length} participant{participants.length > 1 ? 's' : ''} · tous les patrouillards</small></div>
@@ -651,10 +656,11 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
           {participants.length > 5 && <span className="participant-more">+{participants.length - 5}</span>}
         </div>
       </div>
+      )}
       <div className="chat-container">
         <div className="chat-messages" ref={scrollRef}>
           {loading ? <div className="loading-screen" style={{ minHeight: '200px' }}><div className="spinner" /></div>
-            : messages.length === 0 ? <div className="empty-state"><MessageSquare size={40} /><p>Aucun message. Lance la conversation !</p></div>
+            : messages.length === 0 ? <div className="empty-state"><MessageSquare size={40} /><p>{chatMode === 'group' ? 'Aucun message. Lance la conversation !' : 'Aucun message privé. Commence cette discussion !'}</p></div>
             : messages.map((m) => {
               const author = users[m.auteur_id ?? ''];
               const isMe = m.auteur_id === session.user.id;
@@ -665,7 +671,7 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
                     <div className="chat-msg-header"><b>{author?.prenom ?? 'Inconnu'}</b><small>{new Date(m.created_at).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small></div>
                      {m.contenu && <p>{m.contenu}</p>}
                      <StoredImages value={m.image_url} alt="Image partagée dans le chat" className="chat-images" />
-                    {canMod && <button className="chat-delete" onClick={() => delMsg(m.id)}><X size={12} /></button>}
+                    {(canMod || (chatMode === 'private' && isMe)) && <button className="chat-delete" onClick={() => delMsg(m.id)}><X size={12} /></button>}
                   </div>
                 </div>
               );
@@ -673,16 +679,16 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
           }
         </div>
         <form className="chat-input-bar" onSubmit={send}>
-           <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Écris à toute la patrouille…" />
+           <input value={text} onChange={(e) => setText(e.target.value)} placeholder={chatMode === 'group' ? 'Écris à toute la patrouille…' : selectedUser ? `Message privé à ${selectedUser.prenom}…` : 'Choisis un patrouillard…'} disabled={chatMode === 'private' && !selectedRecipient} />
            <ImagePicker compact value={imageUrls} onChange={(value) => { setImageUrls(value); setImageError(''); }} error={imageError} onError={setImageError} />
-          <button className="primary-button" type="submit" disabled={!text.trim() && imageUrls.length === 0}><ArrowUpRight size={18} /></button>
+          <button className="primary-button" type="submit" disabled={(!text.trim() && imageUrls.length === 0) || (chatMode === 'private' && !selectedRecipient)}><ArrowUpRight size={18} /></button>
         </form>
       </div>
       {showClear && (
         <div className="modal-backdrop" onMouseDown={() => setShowClear(false)}>
           <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="modal-heading"><div><span className="eyebrow">Attention</span><h2>Vider l'historique</h2></div><button className="icon-button" onClick={() => setShowClear(false)}><X size={18} /></button></div>
-            <p style={{ color: '#84938a', fontSize: '13px', lineHeight: 1.6 }}>Voulez-vous vraiment supprimer tout l'historique du chat ? Cette action est irréversible.</p>
+             <div className="modal-heading"><div><span className="eyebrow">Attention</span><h2>{chatMode === 'group' ? "Vider l'historique" : 'Supprimer la discussion'}</h2></div><button className="icon-button" onClick={() => setShowClear(false)}><X size={18} /></button></div>
+             <p style={{ color: '#84938a', fontSize: '13px', lineHeight: 1.6 }}>Voulez-vous vraiment supprimer {chatMode === 'group' ? "tout l'historique du salon de patrouille" : `la discussion privée avec ${selectedUser?.prenom ?? 'ce patrouillard'}`} ? Cette action est irréversible.</p>
             <div className="modal-actions"><button className="secondary-button" onClick={() => setShowClear(false)}>Annuler</button><button className="primary-button danger" onClick={clearHistory}><TriangleAlert size={17} /> Supprimer</button></div>
           </div>
         </div>
