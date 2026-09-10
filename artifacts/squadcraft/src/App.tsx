@@ -24,6 +24,8 @@ import {
   Settings,
   ShieldCheck,
   ShoppingBag,
+  Star,
+  StickyNote,
   TentTree,
   Trash2,
   TriangleAlert,
@@ -250,6 +252,7 @@ function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
 function Dashboard({ session, onLogout }: { session: Session; onLogout: () => void }) {
   const [view, setView] = useState<View>('overview');
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
@@ -292,12 +295,22 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
 
   return (
     <div className="app-shell">
+      <div className="depth-background" aria-hidden="true">
+        <span className="depth-shape depth-shape-green" />
+        <span className="depth-shape depth-shape-gold" />
+        <span className="depth-shape depth-shape-glass" />
+      </div>
       <aside className={`sidebar ${mobileOpen ? 'is-open' : ''}`}>
         <div className="brand-lockup">
           <img src={session.patrouille?.logo_url ?? '/serval-logo.png'} alt="Serval" className="brand-mark" />
           <div><strong>Squad</strong><span>Craft</span></div>
           <button className="sidebar-close" onClick={() => setMobileOpen(false)} aria-label="Fermer"><X size={18} /></button>
         </div>
+        <button className="notes-launcher" onClick={() => { setNotesOpen(true); setMobileOpen(false); }}>
+          <span><StickyNote size={18} /></span>
+          <div><b>Mes notes</b><small>Mémos, tâches & évaluations</small></div>
+          <ChevronRight size={15} />
+        </button>
         <div className="sidebar-label">Navigation</div>
         <nav className="main-nav">
           {navItems.map(({ id, label, icon: Icon }) => (
@@ -339,7 +352,136 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
           {view === 'settings' && <SettingsView session={session} onToast={setToast} />}
         </div>
       </main>
+      {notesOpen && <NotesHub session={session} onClose={() => setNotesOpen(false)} onToast={setToast} />}
       {toast && <div className="toast"><Check size={17} />{toast}</div>}
+    </div>
+  );
+}
+
+type PersonalTask = { id: string; text: string; done: boolean };
+type PatrolEvaluation = { id: string; userId: string; score: number; comment: string; createdAt: string };
+
+function NotesHub({ session, onClose, onToast }: { session: Session; onClose: () => void; onToast: (message: string) => void }) {
+  const storageKey = `squadcraft_notes_${session.user.id}`;
+  const [tab, setTab] = useState<'memo' | 'tasks' | 'ratings'>('memo');
+  const [memo, setMemo] = useState('');
+  const [tasks, setTasks] = useState<PersonalTask[]>([]);
+  const [evaluations, setEvaluations] = useState<PatrolEvaluation[]>([]);
+  const [members, setMembers] = useState<User[]>([]);
+  const [taskText, setTaskText] = useState('');
+  const [evaluation, setEvaluation] = useState({ userId: '', score: 5, comment: '' });
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) ?? '{}');
+      setMemo(typeof saved.memo === 'string' ? saved.memo : '');
+      setTasks(Array.isArray(saved.tasks) ? saved.tasks : []);
+      setEvaluations(Array.isArray(saved.evaluations) ? saved.evaluations : []);
+    } catch {
+      localStorage.removeItem(storageKey);
+    }
+    setReady(true);
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!ready) return;
+    localStorage.setItem(storageKey, JSON.stringify({ memo, tasks, evaluations }));
+  }, [storageKey, ready, memo, tasks, evaluations]);
+
+  useEffect(() => {
+    if (!session.patrouille || isParent(session)) return;
+    supabase.from('users').select('*').eq('patrouille_id', session.patrouille.id).neq('role', 'PARENT').eq('statut', 'ACTIF').order('prenom')
+      .then(({ data }) => {
+        const activeMembers = (data ?? []) as User[];
+        setMembers(activeMembers);
+        setEvaluation((current) => ({ ...current, userId: current.userId || activeMembers[0]?.id || '' }));
+      });
+  }, [session]);
+
+  const addTask = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!taskText.trim()) return;
+    setTasks((current) => [...current, { id: crypto.randomUUID(), text: taskText.trim(), done: false }]);
+    setTaskText('');
+  };
+
+  const addEvaluation = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!evaluation.userId) return;
+    setEvaluations((current) => [{
+      id: crypto.randomUUID(),
+      userId: evaluation.userId,
+      score: evaluation.score,
+      comment: evaluation.comment.trim(),
+      createdAt: new Date().toISOString(),
+    }, ...current]);
+    setEvaluation((current) => ({ ...current, score: 5, comment: '' }));
+    onToast('Évaluation enregistrée');
+  };
+
+  return (
+    <div className="notes-backdrop" onMouseDown={onClose}>
+      <aside className="notes-drawer" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="notes-heading">
+          <div className="notes-title-icon"><StickyNote size={20} /></div>
+          <div><span className="eyebrow">Espace personnel</span><h2>Mes notes</h2></div>
+          <button className="icon-button" onClick={onClose} aria-label="Fermer les notes"><X size={19} /></button>
+        </div>
+        <div className="notes-tabs">
+          <button className={tab === 'memo' ? 'active' : ''} onClick={() => setTab('memo')}>Mémo</button>
+          <button className={tab === 'tasks' ? 'active' : ''} onClick={() => setTab('tasks')}>Tâches <span>{tasks.filter((task) => !task.done).length}</span></button>
+          <button className={tab === 'ratings' ? 'active' : ''} onClick={() => setTab('ratings')}>Évaluations</button>
+        </div>
+
+        {tab === 'memo' && (
+          <div className="notes-section">
+            <label className="input-label" htmlFor="personal-memo">Bloc-notes personnel</label>
+            <textarea id="personal-memo" value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="Écris ici ce que tu ne veux pas oublier…" rows={16} />
+            <small className="notes-autosave"><Check size={13} /> Enregistrement automatique sur cet appareil</small>
+          </div>
+        )}
+
+        {tab === 'tasks' && (
+          <div className="notes-section">
+            <form className="notes-add-row" onSubmit={addTask}>
+              <input value={taskText} onChange={(event) => setTaskText(event.target.value)} placeholder="Ajouter une tâche…" />
+              <button className="primary-button" type="submit" disabled={!taskText.trim()}><Plus size={17} /></button>
+            </form>
+            <div className="personal-task-list">
+              {tasks.length === 0 && <div className="notes-empty">Aucune tâche pour le moment.</div>}
+              {tasks.map((task) => (
+                <div className={`personal-task ${task.done ? 'done' : ''}`} key={task.id}>
+                  <button className="personal-task-check" onClick={() => setTasks((current) => current.map((item) => item.id === task.id ? { ...item, done: !item.done } : item))}>{task.done && <Check size={14} />}</button>
+                  <span>{task.text}</span>
+                  <button className="icon-button" onClick={() => setTasks((current) => current.filter((item) => item.id !== task.id))}><Trash2 size={15} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab === 'ratings' && (
+          <div className="notes-section">
+            {isParent(session) ? <div className="notes-empty">Les évaluations sont réservées à l’encadrement de la patrouille.</div> : (
+              <>
+                <form className="evaluation-form" onSubmit={addEvaluation}>
+                  <label>Patrouillard<select value={evaluation.userId} onChange={(event) => setEvaluation({ ...evaluation, userId: event.target.value })}>{members.map((member) => <option key={member.id} value={member.id}>{member.prenom}</option>)}</select></label>
+                  <label>Appréciation<div className="rating-picker">{[1, 2, 3, 4, 5].map((score) => <button type="button" key={score} className={score <= evaluation.score ? 'active' : ''} onClick={() => setEvaluation({ ...evaluation, score })}><Star size={22} /></button>)}</div></label>
+                  <label>Commentaire<textarea value={evaluation.comment} onChange={(event) => setEvaluation({ ...evaluation, comment: event.target.value })} placeholder="Points forts, progression, objectifs…" rows={4} /></label>
+                  <button className="primary-button" type="submit" disabled={!evaluation.userId}>Enregistrer l’évaluation</button>
+                </form>
+                <div className="evaluation-list">
+                  {evaluations.map((item) => {
+                    const member = members.find((candidate) => candidate.id === item.userId);
+                    return <div className="evaluation-card" key={item.id}><div><b>{member?.prenom ?? 'Patrouillard'}</b><span>{'★'.repeat(item.score)}{'☆'.repeat(5 - item.score)}</span></div>{item.comment && <p>{item.comment}</p>}<button className="icon-button" onClick={() => setEvaluations((current) => current.filter((candidate) => candidate.id !== item.id))}><Trash2 size={14} /></button></div>;
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </aside>
     </div>
   );
 }
