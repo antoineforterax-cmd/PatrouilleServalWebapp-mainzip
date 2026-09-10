@@ -143,7 +143,7 @@ function InitScreen({ onDone }: { onDone: (s: Session) => void }) {
       </div>
       <div className="auth-panel">
         <div className="auth-panel-inner">
-          <img src="/image.png" alt="SquadCraft" className="auth-logo" />
+          <img src="/serval-logo.png" alt="Logo Serval" className="auth-logo" />
           <span className="auth-kicker">Configuration initiale</span>
           <h2>Créer le compte CP</h2>
           <p className="auth-intro">Le CP a tous les droits de gestion sur la patrouille.</p>
@@ -213,7 +213,7 @@ function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
       </div>
       <div className="auth-panel">
         <div className="auth-panel-inner">
-          <img src="/image.png" alt="SquadCraft" className="auth-logo" />
+          <img src="/serval-logo.png" alt="Logo Serval" className="auth-logo" />
           <span className="auth-kicker">SquadCraft</span>
           <h2>Connexion</h2>
           <p className="auth-intro">Saisis ton prénom et ton code d'accès.</p>
@@ -293,7 +293,7 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
     <div className="app-shell">
       <aside className={`sidebar ${mobileOpen ? 'is-open' : ''}`}>
         <div className="brand-lockup">
-          <img src={session.patrouille?.logo_url ?? '/image.png'} alt="Serval" className="brand-mark" />
+          <img src={session.patrouille?.logo_url ?? '/serval-logo.png'} alt="Serval" className="brand-mark" />
           <div><strong>Squad</strong><span>Craft</span></div>
           <button className="sidebar-close" onClick={() => setMobileOpen(false)} aria-label="Fermer"><X size={18} /></button>
         </div>
