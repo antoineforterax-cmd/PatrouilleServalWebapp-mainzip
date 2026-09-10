@@ -34,6 +34,7 @@ import {
   X,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import ThreeWorld from '@/components/ThreeWorld';
 import type {
   User, Weekend, Materiel, Pharmacie, Transaction,
   Annonce, Message as ChatMessage, Badge, UserBadge, ParentRelation,
@@ -131,6 +132,7 @@ function InitScreen({ onDone }: { onDone: (s: Session) => void }) {
 
   return (
     <div className="auth-screen">
+      <ThreeWorld variant="auth" />
       <div className="auth-visual">
         <div className="auth-visual-copy">
           <span className="eyebrow"><ShieldCheck size={15} /> Première installation</span>
@@ -202,6 +204,7 @@ function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
 
   return (
     <div className="auth-screen">
+      <ThreeWorld variant="auth" />
       <div className="auth-visual">
         <div className="auth-visual-copy">
           <span className="eyebrow"><ShieldCheck size={15} /> Espace privé scout</span>
@@ -293,6 +296,7 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
 
   return (
     <div className="app-shell">
+      <ThreeWorld />
       <div className="ambient-orb ambient-orb-one" aria-hidden="true" />
       <div className="ambient-orb ambient-orb-two" aria-hidden="true" />
       <div className="ambient-grid" aria-hidden="true" />
@@ -575,8 +579,7 @@ function Annonces({ session, onToast }: { session: Session; onToast: (m: string)
 function Chat({ session, onToast }: { session: Session; onToast: (m: string) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [users, setUsers] = useState<Record<string, User>>({});
-  const [recipients, setRecipients] = useState<User[]>([]);
-  const [selectedRecipient, setSelectedRecipient] = useState('');
+  const [participants, setParticipants] = useState<User[]>([]);
   const [text, setText] = useState('');
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [imageError, setImageError] = useState('');
@@ -589,27 +592,9 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
     setLoading(true);
     const { data: msgs } = await supabase.from('messages').select('*').eq('patrouille_id', session.patrouille.id).order('created_at', { ascending: true });
     const { data: us } = await supabase.from('users').select('*').eq('patrouille_id', session.patrouille.id).neq('role', 'PARENT').eq('statut', 'ACTIF').order('prenom');
-    const { data: parentRelations } = await supabase.from('parent_relations').select('parent_id').eq('enfant_id', session.user.id);
-    const parentIds = (parentRelations ?? []).map((relation) => relation.parent_id);
-    const { data: linkedParents } = parentIds.length > 0
-      ? await supabase.from('users').select('*').in('id', parentIds).eq('statut', 'ACTIF').order('prenom')
-      : { data: [] };
     const activeUsers = (us ?? []) as User[];
-    const activeParents = (linkedParents ?? []) as User[];
-    const availableRecipients = activeUsers.filter((user) => user.id !== session.user.id);
-    activeParents.forEach((parentUser) => {
-      if (!availableRecipients.some((recipient) => recipient.id === parentUser.id)) availableRecipients.push(parentUser);
-    });
-    setRecipients(availableRecipients);
-    const recipientId = selectedRecipient && availableRecipients.some((user) => user.id === selectedRecipient)
-      ? selectedRecipient
-      : availableRecipients[0]?.id ?? '';
-    if (recipientId !== selectedRecipient) setSelectedRecipient(recipientId);
-    setMessages((msgs ?? []).filter((message) => {
-      if (!message.destinataire_id || !recipientId) return false;
-      return (message.auteur_id === session.user.id && message.destinataire_id === recipientId)
-        || (message.auteur_id === recipientId && message.destinataire_id === session.user.id);
-    }));
+    setParticipants(activeUsers);
+    setMessages((msgs ?? []).filter((message) => !message.destinataire_id));
     const map: Record<string, User> = {};
     activeUsers.forEach((u) => { map[u.id] = u; });
     setUsers(map);
@@ -620,7 +605,7 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
     load();
     const interval = setInterval(load, 5000);
     return () => clearInterval(interval);
-  }, [session, selectedRecipient]);
+  }, [session]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -628,9 +613,9 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!text.trim() && imageUrls.length === 0) || !session.patrouille || !selectedRecipient) return;
+    if ((!text.trim() && imageUrls.length === 0) || !session.patrouille) return;
     const { error } = await supabase.from('messages').insert({
-      auteur_id: session.user.id, destinataire_id: selectedRecipient, patrouille_id: session.patrouille.id, contenu: text.trim(),
+      auteur_id: session.user.id, destinataire_id: null, patrouille_id: session.patrouille.id, contenu: text.trim(),
       image_url: serializeStoredImages(imageUrls),
     });
     if (error) { onToast('Erreur'); return; }
@@ -653,13 +638,18 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
 
   return (
     <>
-      <PageHeading eyebrow="Patrouille" title="Chat du Serval" description="Messagerie privée de la patrouille." action={canMod ? <button className="secondary-button" onClick={() => setShowClear(true)}><TriangleAlert size={16} /> Vider l'historique</button> : undefined} />
-      <div className="private-chat-toolbar">
-        <LockKeyhole size={17} />
-        <label htmlFor="chat-recipient">Conversation privée avec</label>
-        <select id="chat-recipient" value={selectedRecipient} onChange={(e) => setSelectedRecipient(e.target.value)} disabled={recipients.length === 0}>
-          {recipients.length === 0 ? <option value="">Aucun autre patrouillard</option> : recipients.map((recipient) => <option key={recipient.id} value={recipient.id}>{recipient.prenom}</option>)}
-        </select>
+      <PageHeading eyebrow="Patrouille" title="Chat du Serval" description="Le salon commun de toute la patrouille." action={canMod ? <button className="secondary-button" onClick={() => setShowClear(true)}><TriangleAlert size={16} /> Vider l'historique</button> : undefined} />
+      <div className="patrol-chat-toolbar">
+        <div className="patrol-chat-icon"><Users size={18} /></div>
+        <div><b>Salon de la patrouille</b><small>{participants.length} participant{participants.length > 1 ? 's' : ''} · tous les patrouillards</small></div>
+        <div className="participant-stack">
+          {participants.slice(0, 5).map((participant) => (
+            <span key={participant.id} className={`avatar avatar-${avatarColor(participant.role)}`} title={participant.prenom}>
+              {participant.photo_url ? <img src={participant.photo_url} alt="" /> : initials(participant.prenom)}
+            </span>
+          ))}
+          {participants.length > 5 && <span className="participant-more">+{participants.length - 5}</span>}
+        </div>
       </div>
       <div className="chat-container">
         <div className="chat-messages" ref={scrollRef}>
@@ -683,9 +673,9 @@ function Chat({ session, onToast }: { session: Session; onToast: (m: string) => 
           }
         </div>
         <form className="chat-input-bar" onSubmit={send}>
-           <input value={text} onChange={(e) => setText(e.target.value)} placeholder={selectedRecipient ? 'Écris ton message…' : 'Sélectionne un patrouillard…'} disabled={!selectedRecipient} />
+           <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Écris à toute la patrouille…" />
            <ImagePicker compact value={imageUrls} onChange={(value) => { setImageUrls(value); setImageError(''); }} error={imageError} onError={setImageError} />
-          <button className="primary-button" type="submit" disabled={(!text.trim() && imageUrls.length === 0) || !selectedRecipient}><ArrowUpRight size={18} /></button>
+          <button className="primary-button" type="submit" disabled={!text.trim() && imageUrls.length === 0}><ArrowUpRight size={18} /></button>
         </form>
       </div>
       {showClear && (
