@@ -137,6 +137,7 @@ function InitScreen({ onDone }: { onDone: (s: Session) => void }) {
           <h1>SquadCraft<br /><em>Serval.</em></h1>
           <p>Configure le compte Chef de Patrouille. Tu pourras ensuite créer les fiches de tes patrouillards et leurs parents.</p>
         </div>
+        <GlassScene />
         <div className="auth-sun" />
         <div className="auth-forest forest-one" />
         <div className="auth-forest forest-two" />
@@ -207,6 +208,7 @@ function LoginScreen({ onLogin }: { onLogin: (s: Session) => void }) {
           <h1>SquadCraft<br /><em>Serval.</em></h1>
           <p>La gestion numérique de la Patrouille du Serval.</p>
         </div>
+        <GlassScene />
         <div className="auth-sun" />
         <div className="auth-forest forest-one" />
         <div className="auth-forest forest-two" />
@@ -291,6 +293,9 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
 
   return (
     <div className="app-shell">
+      <div className="ambient-orb ambient-orb-one" aria-hidden="true" />
+      <div className="ambient-orb ambient-orb-two" aria-hidden="true" />
+      <div className="ambient-grid" aria-hidden="true" />
       <aside className={`sidebar ${mobileOpen ? 'is-open' : ''}`}>
         <div className="brand-lockup">
           <img src={session.patrouille?.logo_url ?? '/serval-logo.png'} alt="Serval" className="brand-mark" />
@@ -339,6 +344,32 @@ function Dashboard({ session, onLogout }: { session: Session; onLogout: () => vo
         </div>
       </main>
       {toast && <div className="toast"><Check size={17} />{toast}</div>}
+    </div>
+  );
+}
+
+function GlassScene() {
+  return (
+    <div className="glass-scene" aria-hidden="true">
+      <div className="scene-glow" />
+      <div className="scene-panel scene-panel-nav">
+        <span className="scene-logo"><img src="/serval-logo.png" alt="" /></span>
+        <i />
+        <i />
+        <i />
+        <i />
+      </div>
+      <div className="scene-panel scene-panel-main">
+        <span className="scene-chip">S</span>
+        <strong>SQUADCRAFT</strong>
+        <em>SERVAL.</em>
+        <div className="scene-input" />
+        <div className="scene-input short" />
+        <div className="scene-button" />
+      </div>
+      <div className="scene-metric scene-metric-green"><small>Caisse</small><b>0.00 €</b></div>
+      <div className="scene-metric scene-metric-gold"><small>Membres</small><b>2</b></div>
+      <div className="scene-metric scene-metric-blue"><small>Matériel</small><b>0</b></div>
     </div>
   );
 }
